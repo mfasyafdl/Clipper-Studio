@@ -33,7 +33,7 @@ Repo asli dipakai sebagai dependensi, tidak di-fork:
 
 ## Kebutuhan
 
-- Windows 10/11, GPU NVIDIA (target: RTX 3060) dengan driver terbaru
+- Windows 10/11, GPU NVIDIA (diuji: RTX 3050 Laptop 4 GB) dengan driver terbaru
 - ±10 GB ruang kosong (PyTorch CUDA + model Whisper)
 - API key Gemini (ada kuota gratis: https://aistudio.google.com/apikey) atau OpenAI
 
@@ -105,8 +105,8 @@ merender ulang. Kenapa tidak lewat DaVinci Resolve langsung? Lihat
 - Reframe bawaan AI-Youtube-Shorts-Generator memakai deteksi wajah Haar
   (OpenCV) yang sederhana. Untuk podcast dua orang, kamera bisa "melompat" ke
   wajah yang salah. Itu salah satu hal utama yang perlu kamu cek saat audit.
-- RTX 3060 laptop hanya punya 6 GB VRAM. Kalau muncul `CUDA out of memory`,
-  turunkan `WHISPER_BATCH` ke 4 di `.env`.
+- GPU dengan VRAM kecil (RTX 3050 Laptop 4 GB, RTX 3060 Laptop 6 GB) bisa kehabisan memori. Kalau muncul `CUDA out of memory`,
+  turunkan `WHISPER_BATCH` ke 4 (atau 2) dan pakai `WHISPER_COMPUTE=int8_float16` di `.env`.
 
 ## Tes
 
