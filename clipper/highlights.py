@@ -36,7 +36,8 @@ def run_ays(source: Path, job_dir: Path, num_clips: int, settings: Settings) -> 
     env["LOCAL_OUTPUT_DIR"] = str(job_dir.resolve())
     env["PYTHONIOENCODING"] = "utf-8"
     cmd = [
-        str(settings.ays_python), "main.py", str(source.resolve()),
+        str(settings.ays_python), str(Path(__file__).with_name("ays_run.py")), str(AYS_DIR),
+        str(source.resolve()),
         "--mode", "local", "--num-clips", str(num_clips),
         "--aspect-ratio", "9:16", "--output-json", str(out_json.resolve()),
     ]

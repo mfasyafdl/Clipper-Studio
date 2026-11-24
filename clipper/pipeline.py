@@ -67,7 +67,7 @@ def download(url: str, job_dir: Path, max_height: int = 1080) -> Path:
 
 
 def new_job_dir(url: str, settings: Settings) -> Path:
-    m = re.search(r"(?:v=|youtu\.be/|shorts/)([A-Za-z0-9_-]{11})", url)
+    m = re.search(r"(?:v=|youtu\.be/|shorts/|live/)([A-Za-z0-9_-]{11})", url)
     name = m.group(1) if m else _slug(Path(url).stem)
     job = settings.jobs_dir / f"{datetime.now():%Y%m%d}-{name}"
     job.mkdir(parents=True, exist_ok=True)
