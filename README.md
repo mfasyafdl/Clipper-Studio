@@ -58,13 +58,13 @@ bentrok), lalu mengecek apakah CUDA terdeteksi.
 .\run.ps1 run "https://www.youtube.com/watch?v=XXXXXXXXXXX" --clips 5
 
 # 2. Audit: membuka halaman review di browser
-.\run.ps1 review jobs\20261124-XXXXXXXXXXX
+.\run.ps1 review "E:\VIdeo Clipping\20261124-XXXXXXXXXXX"
 
 # 3. Terapkan keputusanmu (trim, ganti hook, kumpulkan yang dipakai)
-.\run.ps1 apply jobs\20261124-XXXXXXXXXXX
+.\run.ps1 apply "E:\VIdeo Clipping\20261124-XXXXXXXXXXX"
 
 # Ganti gaya subtitle di .env, lalu render ulang semua klip
-.\run.ps1 captions jobs\20261124-XXXXXXXXXXX
+.\run.ps1 captions "E:\VIdeo Clipping\20261124-XXXXXXXXXXX"
 ```
 
 ### Di halaman review
@@ -80,6 +80,8 @@ bentrok), lalu mengecek apakah CUDA terdeteksi.
 
 | File | Isi |
 |---|---|
+Semua job ditulis ke `JOBS_DIR` di `.env` (default: `E:\VIdeo Clipping`).
+
 | `source_*.mp4` | video asli |
 | `words.json` | transkrip per kata |
 | `final/clip_XX.mp4` | klip jadi (1080x1920) |

@@ -68,6 +68,12 @@ if (-not (Test-Path ".venv-wx")) { Invoke-Expression "$py -m venv .venv-wx" }
 Step "Cek CUDA dari Python"
 & .\.venv-wx\Scripts\python.exe -c "import torch; ok=torch.cuda.is_available(); print('CUDA:', ok, torch.cuda.get_device_name(0) if ok else '(tidak ada, akan pakai CPU)')"
 
+$JobsDir = (Get-Content ".env.example" | Where-Object { $_ -match '^JOBS_DIR=' }) -replace '^JOBS_DIR=', ''
+if ($JobsDir -and -not (Test-Path $JobsDir)) {
+    try { New-Item -ItemType Directory -Force $JobsDir | Out-Null; Write-Host "Folder output dibuat: $JobsDir" }
+    catch { Write-Warning "Tidak bisa membuat $JobsDir. Ubah JOBS_DIR di .env." }
+}
+
 if (-not (Test-Path ".env")) {
     Copy-Item ".env.example" ".env"
     Write-Host "`n.env dibuat. Isi GEMINI_API_KEY (gratis di https://aistudio.google.com/apikey) sebelum menjalankan." -ForegroundColor Yellow
