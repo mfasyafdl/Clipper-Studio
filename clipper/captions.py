@@ -15,6 +15,7 @@ from pathlib import Path
 from .config import Settings
 
 PLAY_W, PLAY_H = 1080, 1920
+_FAILED_ENCODERS: set[str] = set()  # don't retry a broken NVENC for every clip
 _BREAK_PUNCT = re.compile(r"[.,!?;:…]$")
 
 
@@ -121,6 +122,8 @@ def burn(clip: Path, ass_path: Path, out_path: Path, encoder: str = "auto") -> s
         f"crop={PLAY_W}:{PLAY_H},setsar=1,ass={ass_path.name}"
     )
     candidates = ["h264_nvenc", "libx264"] if encoder == "auto" else [encoder]
+    if encoder == "auto":
+        candidates = [c for c in candidates if c not in _FAILED_ENCODERS] or ["libx264"]
     last_err = ""
     for enc in candidates:
         cmd = [
@@ -133,7 +136,9 @@ def burn(clip: Path, ass_path: Path, out_path: Path, encoder: str = "auto") -> s
         if proc.returncode == 0:
             return enc
         last_err = proc.stderr.strip()[-800:]
-        print(f"[captions] encoder {enc} gagal, coba berikutnya", flush=True)
+        if enc not in _FAILED_ENCODERS:
+            print(f"[captions] encoder {enc} gagal ({last_err.splitlines()[-1] if last_err else '?'}), pakai berikutnya", flush=True)
+        _FAILED_ENCODERS.add(enc)
     raise RuntimeError(f"ffmpeg gagal membakar subtitle: {last_err}")
 
 

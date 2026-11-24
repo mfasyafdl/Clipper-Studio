@@ -16,7 +16,20 @@ function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Have($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
 function Refresh-Path {
     $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
-                [Environment]::GetEnvironmentVariable("Path", "User")
+                [Environment]::GetEnvironmentVariable("Path", "User") + ";" +
+                "$env:LOCALAPPDATA\Microsoft\WinGet\Links;$env:LOCALAPPDATA\Microsoft\WindowsApps"
+}
+function Ensure-Ffmpeg {
+    # winget sometimes installs Gyan.FFmpeg without creating the Links shim.
+    if (Have "ffmpeg") { return }
+    $exe = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Recurse -Filter ffmpeg.exe -ErrorAction SilentlyContinue |
+           Select-Object -First 1
+    if (-not $exe) { throw "ffmpeg.exe tidak ditemukan setelah instal. Pasang FFmpeg manual lalu jalankan ulang." }
+    $dir = $exe.DirectoryName
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ($userPath -notlike "*$dir*") { [Environment]::SetEnvironmentVariable("Path", "$userPath;$dir", "User") }
+    $env:Path = "$env:Path;$dir"
+    Write-Host "  ffmpeg ditambahkan ke PATH: $dir"
 }
 function Winget-Install($id, $cmd) {
     if (Have $cmd) { Write-Host "  $cmd sudah ada"; return }
@@ -35,7 +48,12 @@ if (Have "nvidia-smi") {
 
 Step "Pasang Python 3.11, Git, FFmpeg (winget)"
 Winget-Install "Git.Git" "git"
-Winget-Install "Gyan.FFmpeg" "ffmpeg"
+Refresh-Path
+if (-not (Have "ffmpeg")) {
+    winget install --id Gyan.FFmpeg -e --accept-source-agreements --accept-package-agreements
+    Refresh-Path
+}
+Ensure-Ffmpeg
 $py = $null
 if (Have "py") { py -3.11 --version 2>$null | Out-Null; if ($LASTEXITCODE -eq 0) { $py = "py -3.11" } }
 if (-not $py) {
@@ -58,6 +76,8 @@ Step "Virtualenv untuk AI-Youtube-Shorts-Generator (.venv-ays)"
 if (-not (Test-Path ".venv-ays")) { Invoke-Expression "$py -m venv .venv-ays" }
 & .\.venv-ays\Scripts\python.exe -m pip install --upgrade pip
 & .\.venv-ays\Scripts\python.exe -m pip install -r (Join-Path $Ays "requirements-local.txt")
+# OpenCV 5 dropped CascadeClassifier from the main package; the face tracker needs it.
+& .\.venv-ays\Scripts\python.exe -m pip install "opencv-python>=4.8,<5"
 
 Step "Virtualenv untuk WhisperX + yt-dlp dengan CUDA 12.8 (.venv-wx), unduhan besar ~3 GB"
 if (-not (Test-Path ".venv-wx")) { Invoke-Expression "$py -m venv .venv-wx" }

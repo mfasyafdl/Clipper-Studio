@@ -143,3 +143,18 @@ def test_review_server_saves_decisions(tmp_path):
             urllib.request.urlopen(bad)
     finally:
         srv.shutdown()
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg not installed")
+def test_retry_failed_recrops_missing_clips(tmp_path, monkeypatch):
+    s = Settings(video_encoder="libx264")
+    job = tmp_path / "job"
+    job.mkdir()
+    _make_video(job / "source_x.mp4", 12, "640x360")
+    (job / "words.json").write_text(json.dumps({"words": [W("halo", 1, 1.5)]}), encoding="utf-8")
+    pipeline.save_clips(job, [{"id": "clip_01", "start": 1.0, "end": 4.0, "hook": "h", "vertical": None,
+                               "final": None, "error": "mp4v crash"}])
+    monkeypatch.setattr(pipeline.highlights, "recrop",
+                        lambda src, a, b, out, st: _make_video(out, int(b - a), "202x360"))
+    assert pipeline.retry_failed(job, s) == ["clip_01"]
+    assert (job / "final" / "clip_01.mp4").exists()

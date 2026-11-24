@@ -63,6 +63,9 @@ bentrok), lalu mengecek apakah CUDA terdeteksi.
 # 3. Terapkan keputusanmu (trim, ganti hook, kumpulkan yang dipakai)
 .\run.ps1 apply "E:\VIdeo Clipping\20261124-XXXXXXXXXXX"
 
+# Ulangi klip yang gagal (crop/caption)
+.\run.ps1 retry "E:\VIdeo Clipping\20261124-XXXXXXXXXXX"
+
 # Ganti gaya subtitle di .env, lalu render ulang semua klip
 .\run.ps1 captions "E:\VIdeo Clipping\20261124-XXXXXXXXXXX"
 ```
@@ -107,6 +110,12 @@ merender ulang. Kenapa tidak lewat DaVinci Resolve langsung? Lihat
   wajah yang salah. Itu salah satu hal utama yang perlu kamu cek saat audit.
 - GPU dengan VRAM kecil (RTX 3050 Laptop 4 GB, RTX 3060 Laptop 6 GB) bisa kehabisan memori. Kalau muncul `CUDA out of memory`,
   turunkan `WHISPER_BATCH` ke 4 (atau 2) dan pakai `WHISPER_COMPUTE=int8_float16` di `.env`.
+
+## Kalau ada masalah
+
+- **Unduhan model Whisper macet di 0 byte**: jalankan `$env:HF_HUB_DISABLE_XET="1"` di PowerShell, lalu ulangi perintahnya.
+- **`h264_nvenc` gagal**: klip tetap dirender dengan libx264 (CPU, lebih lambat). Biasanya penyebabnya driver NVIDIA yang lebih tua dari build FFmpeg; update driver lalu coba lagi.
+- **Video panjang**: menjalankan ulang `run` di hari yang sama memakai ulang video dan transkrip yang sudah ada.
 
 ## Tes
 

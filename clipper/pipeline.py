@@ -197,3 +197,24 @@ def apply_decisions(job_dir: Path, settings: Settings) -> dict:
             "# Catatan review yang perlu dikerjakan manual\n\n" + "\n".join(notes) + "\n", encoding="utf-8")
     refresh_review(job_dir, clips)
     return {"rerendered": [c["id"] for c in changed], "approved": approved, "notes": len(notes)}
+
+
+def retry_failed(job_dir: Path, settings: Settings) -> list[str]:
+    """Re-crop + caption clips whose crop or caption step failed earlier."""
+    clips = load_clips(job_dir)
+    source = source_of(job_dir)
+    todo = [c for c in clips if not c.get("final")]
+    for c in todo:
+        if not c.get("vertical") or not (job_dir / c["vertical"]).exists():
+            vertical = f"short_{c['id']}_retry.mp4"
+            print(f"[retry] crop ulang {c['id']}: {c.get('title', '')}", flush=True)
+            try:
+                highlights.recrop(source, c["start"], c["end"], job_dir / vertical, settings)
+                c["vertical"] = vertical
+            except Exception as e:
+                c["error"] = str(e)
+                print(f"[retry] {c['id']} masih gagal: {e}", flush=True)
+    render_captions(job_dir, [c for c in todo if c.get("vertical")], load_words(job_dir), settings)
+    save_clips(job_dir, clips)
+    refresh_review(job_dir, clips)
+    return [c["id"] for c in todo if c.get("final")]

@@ -27,6 +27,9 @@ def main(argv: list[str] | None = None) -> int:
     a = sub.add_parser("apply", help="terapkan decisions.json (trim, ganti hook, kumpulkan yang dipakai)")
     a.add_argument("job")
 
+    f = sub.add_parser("retry", help="ulangi klip yang gagal di tahap crop/caption")
+    f.add_argument("job")
+
     c = sub.add_parser("captions", help="render ulang subtitle semua klip (setelah ganti gaya di .env)")
     c.add_argument("job")
 
@@ -53,6 +56,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[apply] klip dipakai ({len(result['approved'])}): folder approved/")
         if result["notes"]:
             print("[apply] ada catatan yang butuh edit manual: notes_for_claude.md")
+    elif args.cmd == "retry":
+        from .pipeline import retry_failed
+
+        done = retry_failed(Path(args.job), settings)
+        print(f"[retry] berhasil: {done or '-'}")
     elif args.cmd == "captions":
         from .pipeline import load_clips, load_words, refresh_review, render_captions, save_clips
 
