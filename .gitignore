@@ -1,0 +1,6 @@
+.env
+.venv-*/
+vendor/
+jobs/
+__pycache__/
+*.pyc
