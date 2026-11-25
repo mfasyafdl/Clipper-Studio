@@ -3,11 +3,29 @@ bleeps, SFX, music, loudnorm. The filter graph goes to {name}.filter.txt so a
 failed render can be inspected and re-run by hand."""
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
 from . import captions, effects, layout
 from .config import Settings
+
+
+_GRAPH_OPT: list[str] = []
+
+
+def graph_file_option() -> str:
+    """-filter_complex_script was removed in FFmpeg 9; '-/filter_complex FILE'
+    exists since FFmpeg 7. Pick by version, once."""
+    if not _GRAPH_OPT:
+        try:
+            out = subprocess.run(["ffmpeg", "-hide_banner", "-version"], capture_output=True, text=True).stdout
+            m = re.search(r"version n?(\d+)\.", out)
+            major = int(m.group(1)) if m else 7  # git builds ("N-12345") are new
+        except OSError:
+            major = 7
+        _GRAPH_OPT.append("-/filter_complex" if major >= 7 else "-filter_complex_script")
+    return _GRAPH_OPT[0]
 
 
 def _beats(clip: dict) -> dict:
@@ -61,7 +79,7 @@ def build_filter(cam: layout.CamRect, preset: str, plan: effects.Plan, ass_name:
 
     # --- layout: facecam panel (with zoom/shake) over 4:3 gameplay
     f.append("[vsrc]split=2[c][g]")
-    f.append(f"[c]{cam.filter()},{effects.cam_chain(plan, W, layout.CAM_H)},setsar=1[cam]")
+    f.append(f"[c]{cam.filter()},{effects.cam_chain(plan, W, layout.CAM_H, cam.face_x, cam.face_y)},setsar=1[cam]")
     f.append(f"[g]{layout.game_crop(preset)},scale={W}:{layout.GAME_H}:flags=lanczos,setsar=1[game]")
     f.append(f"[cam]pad={W}:{H}:0:{layout.CAM_Y}:black[bg]")
     f.append(f"[bg][game]overlay=0:{layout.GAME_Y}[v0]")
@@ -136,7 +154,8 @@ def render_gaming(job_dir: Path, source: Path, clip: dict, words: list[dict], se
 
     if not clip.get("cam"):
         rect = layout.detect_cam(source, start, end, settings.layout_preset)
-        clip["cam"] = {"x": rect.x, "y": rect.y, "w": rect.w, "h": rect.h, "found": rect.found}
+        clip["cam"] = {"x": rect.x, "y": rect.y, "w": rect.w, "h": rect.h, "found": rect.found,
+                       "face_x": rect.face_x, "face_y": rect.face_y}
     cam = layout.CamRect(**clip["cam"])
 
     beats = _beats(clip)
@@ -179,7 +198,7 @@ def render_gaming(job_dir: Path, source: Path, clip: dict, words: list[dict], se
         candidates = [c for c in candidates if c not in captions._FAILED_ENCODERS] or ["libx264"]
     err = ""
     for enc in candidates:
-        cmd = ["ffmpeg", "-y", "-v", "error", *inputs, "-filter_complex_script", script.name,
+        cmd = ["ffmpeg", "-y", "-v", "error", *inputs, graph_file_option(), script.name,
                "-map", vout, "-map", aout, "-t", f"{total:.3f}",
                *captions._encoder_args(enc), "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart",
                str(out_path.resolve())]

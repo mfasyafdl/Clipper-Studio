@@ -334,6 +334,7 @@ def remake_clips(job_dir: Path, ids: list[str], settings: Settings) -> list[str]
             r["title"] = c.get("title") or moments.quote_title(moments.clean_text(r["title"]), settings.title_suffix)
             r["hook"] = c.get("hook") or moments.clean_text(r.get("hook") or "").upper()
         r = moments.finalize(r, duration, words)
+        c.pop("cam", None)  # re-detect: newer detection also records where the face sits
         c.update(start=r["start"], end=r["end"], payoff=r["payoff"], kind=r["kind"], beats=r["beats"],
                  category=r.get("category", c.get("category")), title=r.get("title", c.get("title")),
                  hook=r.get("hook", c.get("hook")), version=c.get("version", 1) + 1)

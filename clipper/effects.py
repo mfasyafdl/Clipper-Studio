@@ -53,6 +53,7 @@ RAGE_WORDS = HEAVY_SWEARS | MEDIUM_SWEARS | {"anjir", "anjay", "njir", "bjir", "
 GAP_MAX = 2.5   # silence longer than this inside a clip is compressed ...
 GAP_KEEP = 0.6  # ... keeping this much on each side
 MIN_OUT = 15.0  # never squeeze a clip below this
+SAD_MAX = 10.0  # black-and-white + sad music lasts at most this long before the break
 
 
 def _norm(word: str) -> str:
@@ -148,14 +149,14 @@ def compress_gaps(words: list[dict], duration: float, protect=(), min_out: float
     removed = 0.0
     prev_end = 0.0
     for w in list(words) + [{"start": duration, "end": duration}]:
-        gap_a, gap_b = prev_end, w["start"]
-        for pa, pb in protect:  # the build-up before a peak is never squeezed
-            if pa < gap_b and pb > gap_a:
-                gap_b = min(gap_b, pa)
-        cut = gap_b - gap_a - 2 * GAP_KEEP
-        if gap_b - gap_a > GAP_MAX and duration - removed - cut >= min_out:
-            cuts.append((gap_a + GAP_KEEP, gap_b - GAP_KEEP))
-            removed += cut
+        free = [(prev_end, w["start"])]
+        for pa, pb in protect:  # protected spans (build-up, peak, break) are never squeezed
+            free = [piece for a, b in free for piece in ((a, min(b, pa)), (max(a, pb), b)) if piece[1] > piece[0]]
+        for gap_a, gap_b in free:
+            cut = gap_b - gap_a - 2 * GAP_KEEP
+            if gap_b - gap_a > GAP_MAX and duration - removed - cut >= min_out:
+                cuts.append((gap_a + GAP_KEEP, gap_b - GAP_KEEP))
+                removed += cut
         prev_end = max(prev_end, w["end"])
     spans, cur = [], 0.0
     for a, b in cuts:
@@ -208,8 +209,15 @@ def build_plan(beats: dict, words: list[dict], level: str, censor: str, music: P
     # Only talk-driven moments are squeezed; "other" can be a silent horror
     # build-up where the quiet IS the setup. Never cut from the trigger on.
     trig = beats.get("trigger")
-    guard = float(trig) - 1.0 if trig is not None else peak - (2 if kind == "fake_cry" else 4)
-    protect = [(max(0.0, min(guard, peak - 2)), D)]
+    brk_raw = beats.get("break_s")
+    if kind == "fake_cry":
+        # the act itself can drag (audit: 16 s without a word inside a 41 s clip);
+        # keep the sob around the peak and the run-up to the break, squeeze the rest
+        b_raw = float(brk_raw) if brk_raw is not None else D
+        protect = [(max(0.0, peak - 2), peak + 2), (max(0.0, b_raw - 3), D)]
+    else:
+        guard = float(trig) - 1.0 if trig is not None else peak - 4
+        protect = [(max(0.0, min(guard, peak - 2)), D)]
     segs = compress_gaps(words, D, protect, min(MIN_OUT, D)) if kind in ("rage", "fake_cry") else [(0.0, D)]
     plan.segments = segs
     R = lambda t: remap(t, segs)  # noqa: E731
@@ -238,9 +246,10 @@ def build_plan(beats: dict, words: list[dict], level: str, censor: str, music: P
                 plan.punches.append(Punch(to, 0.12, 0.12, to + 0.6, 0.35, "out_cubic"))
         plan.ending = beats.get("ending") if beats.get("ending") in ("hard_cut", "freeze_sting") else "hard_cut"
     elif kind == "fake_cry":
-        t0 = R(float(beats.get("trigger", max(0.0, peak - 6))))
         brk = beats.get("break_s")
         b = R(float(brk)) if brk is not None else out_D
+        # the sad treatment is a short bit, not the whole clip: at most SAD_MAX before the break
+        t0 = max(R(float(beats.get("trigger", max(0.0, peak - 6)))), b - SAD_MAX)
         b = min(out_D, max(b, t0 + 2.0))
         plan.desat = (t0, b)
         plan.push = (t0, min(b, t0 + 8.0), 0.18)
@@ -255,7 +264,9 @@ def build_plan(beats: dict, words: list[dict], level: str, censor: str, music: P
             t_out = out_D + plan.tail
         if music:
             plan.music = (music, max(0.0, t0 - 0.6), t_out)
-        plan.cards = [(R(float(t)), float(d), str(txt)) for t, d, txt in beats.get("cards", [])[:2]]
+        cards = [(R(float(t)), float(d), str(txt)) for t, d, txt in beats.get("cards", [])]
+        cards = [(max(t, t0 + 0.6), d, txt) for t, d, txt in cards if t0 - 2.0 <= t < b - 0.8]
+        plan.cards = [(t, min(d, b - t), txt) for t, d, txt in cards[:2]]  # only while it is grey
     else:
         plan.push = (0.0, max(0.5, peak_o - 0.1), 0.06)
         plan.punches.append(Punch(peak_o, 0.22, 0.15, min(out_D - 0.1, peak_o + 1.0), 0.4, "out_cubic"))

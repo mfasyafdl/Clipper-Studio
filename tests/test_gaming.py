@@ -46,6 +46,10 @@ def test_cam_rect_median_and_fallback():
     r = layout.cam_rect_from_faces(faces, 1920, 1080, preset)
     assert r.found and r.w > r.h and r.x + r.w <= 1920 and r.y + r.h <= 1080
     assert abs(r.w / r.h - 1080 / 790) < 0.02
+    # the zoom anchor is the face itself, even when the crop is clamped to the frame edge
+    assert abs(r.x + r.face_x * r.w - 1700) < 4 and abs(r.y + r.face_y * r.h - 850) < 4
+    low = layout.cam_rect_from_faces([(1700, 1040, 100, 120)] * 3, 1920, 1080, preset)
+    assert low.y + low.h >= 1076 and low.face_y > 0.6  # clamped: face sits low, zoom anchors there
     fb = layout.cam_rect_from_faces(faces[:2], 1920, 1080, preset)
     assert not fb.found and fb.x == int(0.78 * 1920)
 
@@ -88,6 +92,19 @@ def test_fake_cry_plan_desaturates_and_snaps_back_on_break(tmp_path):
     assert light.kind == "other" and light.music is None
     off = effects.build_plan(beats, _w("huhu", 2.0), "off", "heavy", music)
     assert not off.punches and not off.push
+
+
+def test_long_fake_cry_is_squeezed_and_grey_only_near_the_break():
+    # audit clip 5: 41 s, act from 1 s, ~16 s without a word in the middle, break at 39.5 s
+    words = _w("huhu aku sedih", 1.0, 0.8) + _w("kenapa gini huhu", 5.0, 0.8) + _w("hiks hiks", 24.0) + \
+        _w("tolong aku", 32.0) + _w("wkwk becanda", 39.5)
+    beats = {"duration": 41.3, "kind": "fake_cry", "peak": 6.0, "trigger": 1.0, "break_s": 39.5,
+             "cards": [(2.0, 2.0, "terlalu awal"), (33.0, 2.0, "dia kehilangan segalanya...")]}
+    plan = effects.build_plan(beats, words, "full", "heavy", None)
+    assert plan.duration < 30 and len(plan.segments) > 1
+    t0, b = plan.desat
+    assert b - t0 <= effects.SAD_MAX + 1e-6
+    assert [c[2] for c in plan.cards] == ["dia kehilangan segalanya..."]
 
 
 def test_fake_cry_without_break_freezes_and_fades():

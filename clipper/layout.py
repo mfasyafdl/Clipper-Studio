@@ -51,6 +51,8 @@ class CamRect:
     w: int
     h: int
     found: bool  # False = preset fallback
+    face_x: float = 0.5   # face centre inside the crop (0-1): the zoom anchor
+    face_y: float = 0.42
 
     def filter(self) -> str:
         return f"crop={self.w}:{self.h}:{self.x}:{self.y}"
@@ -79,20 +81,26 @@ def cam_rect_from_faces(faces: list[tuple[float, float, float, float]], src_w: i
     if len(faces) < 3:
         fx, fy, fw, fh = preset["cam_fallback"]
         return CamRect(int(fx * src_w), int(fy * src_h), int(fw * src_w), int(fh * src_h), False)
-    faces = sorted(faces, key=lambda f: f[2])
-    mid = faces[len(faces) // 2]
-    cxs = sorted(f[0] for f in faces)
-    cys = sorted(f[1] for f in faces)
-    cx, cy, fw = cxs[len(cxs) // 2], cys[len(cys) // 2], mid[2]
+    med = lambda xs: sorted(xs)[len(xs) // 2]  # noqa: E731
+    mcx, mcy, mfw = med([f[0] for f in faces]), med([f[1] for f in faces]), med([f[2] for f in faces])
+    # drop stray detections (a face in the game, a poster) far from the webcam face
+    faces = [f for f in faces if abs(f[0] - mcx) <= mfw and abs(f[1] - mcy) <= mfw and 0.6 <= f[2] / mfw <= 1.6]
+    if len(faces) < 3:
+        fx, fy, fw, fh = preset["cam_fallback"]
+        return CamRect(int(fx * src_w), int(fy * src_h), int(fw * src_w), int(fh * src_h), False)
+    cx, cy, fw = med([f[0] for f in faces]), med([f[1] for f in faces]), med([f[2] for f in faces])
     w = min(src_w, int(fw * 3.0))
     h = min(src_h, int(w / (CANVAS_W / CAM_H)))
     w = int(h * (CANVAS_W / CAM_H))
     x = int(min(max(0, cx - w / 2), src_w - w))
     y = int(min(max(0, cy - 0.42 * h), src_h - h))
-    return CamRect(x - x % 2, y - y % 2, w - w % 2, h - h % 2, True)
+    x, y, w, h = x - x % 2, y - y % 2, w - w % 2, h - h % 2
+    # where the face really sits after clamping to the frame edge
+    return CamRect(x, y, w, h, True, round(min(0.8, max(0.2, (cx - x) / w)), 3),
+                   round(min(0.75, max(0.25, (cy - y) / h)), 3))
 
 
-def detect_cam(source: Path, start: float, end: float, preset_name: str, samples: int = 10) -> CamRect:
+def detect_cam(source: Path, start: float, end: float, preset_name: str, samples: int = 16) -> CamRect:
     import cv2  # type: ignore
 
     preset = PRESETS.get(preset_name, PRESETS["windah"])
