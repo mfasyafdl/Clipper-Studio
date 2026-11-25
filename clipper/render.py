@@ -145,8 +145,11 @@ def build_filter(cam: layout.CamRect, preset: str, plan: effects.Plan, ass_name:
     return ";\n".join(f), "[vout]", "[aout]"
 
 
+WEAK_HITS = 8  # out of 16: below this, a solid detection from another clip of the job wins
+
+
 def render_gaming(job_dir: Path, source: Path, clip: dict, words: list[dict], settings: Settings,
-                  name: str, encoder: str = "auto") -> dict:
+                  name: str, encoder: str = "auto", ref_cam: dict | None = None) -> dict:
     final_dir = job_dir / "final"
     final_dir.mkdir(exist_ok=True)
     start, end = float(clip["start"]), float(clip["end"])
@@ -155,8 +158,14 @@ def render_gaming(job_dir: Path, source: Path, clip: dict, words: list[dict], se
     if not clip.get("cam"):
         rect = layout.detect_cam(source, start, end, settings.layout_preset)
         clip["cam"] = {"x": rect.x, "y": rect.y, "w": rect.w, "h": rect.h, "found": rect.found,
-                       "face_x": float(rect.face_x), "face_y": float(rect.face_y)}
-    cam = layout.CamRect(**clip["cam"])
+                       "face_x": float(rect.face_x), "face_y": float(rect.face_y), "hits": rect.hits}
+        # the webcam overlay sits in the same place all stream: when this clip's
+        # faces were hidden (hands, game UI), borrow the best detection of the job
+        if rect.hits < WEAK_HITS and ref_cam and ref_cam.get("hits", 0) >= WEAK_HITS:
+            print(f"[layout] {name}: deteksi lemah ({rect.hits}/16), pakai facecam dari clip lain "
+                  f"({ref_cam['hits']}/16)", flush=True)
+            clip["cam"] = {**ref_cam, "borrowed": True}
+    cam = layout.CamRect(**{k: v for k, v in clip["cam"].items() if k != "borrowed"})
 
     beats = _beats(clip)
     music = None

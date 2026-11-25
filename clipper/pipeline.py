@@ -124,7 +124,8 @@ def render_captions(job_dir: Path, clips: list[dict], words: list[dict], setting
 
             print(f"[render] {name}: {c.get('title', '')}", flush=True)
             try:
-                info = render_gaming(job_dir, source_of(job_dir), c, words, settings, name, settings.video_encoder)
+                info = render_gaming(job_dir, source_of(job_dir), c, words, settings, name, settings.video_encoder,
+                                     ref_cam=best_cam(job_dir, c["id"]))
                 c.update({**info, "error": None})
             except Exception as e:
                 print(f"[render] {name} gagal: {e}", flush=True)
@@ -143,6 +144,18 @@ def render_captions(job_dir: Path, clips: list[dict], words: list[dict], setting
         except Exception as e:  # keep going, show the failure in the review page
             print(f"[captions] {name} gagal: {e}", flush=True)
             c.update({"final": None, "error": str(e)})
+
+
+def best_cam(job_dir: Path, skip_id: str | None = None) -> dict | None:
+    """Most reliable facecam detection among the job's other clips (clips.json)."""
+    try:
+        others = [c.get("cam") for c in load_clips(job_dir) if c.get("id") != skip_id]
+    except (OSError, ValueError):
+        return None
+    good = [cam for cam in others if cam and cam.get("found") and not cam.get("borrowed") and "face_x" in cam]
+    best = max(good, key=lambda cam: cam.get("hits", 0), default=None)
+    # detections saved before hits were recorded needed >= 3 faces: count them as solid
+    return {**best, "hits": best.get("hits", 8)} if best else None
 
 
 def save_clips(job_dir: Path, clips: list[dict]) -> None:

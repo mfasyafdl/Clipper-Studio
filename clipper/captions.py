@@ -19,16 +19,22 @@ _FAILED_ENCODERS: set[str] = set()  # don't retry a broken NVENC for every clip
 _BREAK_PUNCT = re.compile(r"[.,!?;:…]$")
 
 
+MAX_WORD = 1.2
+
+
 def words_in_range(words: list[dict], start: float, end: float) -> list[dict]:
     """Words that overlap [start, end], with times shifted to clip-relative."""
     out = []
     for w in words:
         if w["end"] <= start or w["start"] >= end:
             continue
+        # WhisperX sometimes stretches the last word before a pause over the
+        # whole pause (audit: one caption on screen for 17 s); no word lasts > 1.2 s
+        w_end = min(w["end"], w["start"] + MAX_WORD)
         out.append({
             "word": str(w["word"]).strip(),
             "start": max(0.0, w["start"] - start),
-            "end": min(end - start, w["end"] - start),
+            "end": min(end - start, w_end - start),
         })
     return out
 

@@ -53,6 +53,7 @@ class CamRect:
     found: bool  # False = preset fallback
     face_x: float = 0.5   # face centre inside the crop (0-1): the zoom anchor
     face_y: float = 0.42
+    hits: int = 0         # frames with a face out of the samples
 
     def filter(self) -> str:
         return f"crop={self.w}:{self.h}:{self.x}:{self.y}"
@@ -84,10 +85,9 @@ def cam_rect_from_faces(faces: list[tuple[float, float, float, float]], src_w: i
     med = lambda xs: sorted(xs)[len(xs) // 2]  # noqa: E731
     mcx, mcy, mfw = med([f[0] for f in faces]), med([f[1] for f in faces]), med([f[2] for f in faces])
     # drop stray detections (a face in the game, a poster) far from the webcam face
-    faces = [f for f in faces if abs(f[0] - mcx) <= mfw and abs(f[1] - mcy) <= mfw and 0.6 <= f[2] / mfw <= 1.6]
-    if len(faces) < 3:
-        fx, fy, fw, fh = preset["cam_fallback"]
-        return CamRect(int(fx * src_w), int(fy * src_h), int(fw * src_w), int(fh * src_h), False)
+    kept = [f for f in faces if abs(f[0] - mcx) <= 1.5 * mfw and abs(f[1] - mcy) <= 1.5 * mfw
+            and 0.5 <= f[2] / mfw <= 2.0]
+    faces = kept if len(kept) >= 3 else faces  # a moving head is still the webcam
     cx, cy, fw = med([f[0] for f in faces]), med([f[1] for f in faces]), med([f[2] for f in faces])
     w = min(src_w, int(fw * 3.0))
     h = min(src_h, int(w / (CANVAS_W / CAM_H)))
@@ -130,6 +130,7 @@ def detect_cam(source: Path, start: float, end: float, preset_name: str, samples
         faces.append((rx + x + w / 2, ry + y + h / 2, float(w), float(h)))
     cap.release()
     rect = cam_rect_from_faces(faces, src_w, src_h, preset)
+    rect.hits = len(faces)
     print(f"[layout] facecam {'ketemu' if rect.found else 'tidak ketemu, pakai preset'} "
           f"({len(faces)}/{samples} frame): {rect.w}x{rect.h} di {rect.x},{rect.y}", flush=True)
     return rect

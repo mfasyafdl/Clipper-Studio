@@ -258,12 +258,18 @@ def finalize(clip: dict, duration: float, words: list[dict] | None = None) -> di
     beats = clip.get("beats") or {}
     words = words or []
     if clip.get("kind") == "fake_cry" and not beats.get("break_character") and words:
-        # Gemini missed the break: first laugh / swear after the sob ends the act
-        after = max(float(beats.get("trigger") or start), payoff) + 1.0
-        hit = next((w for w in words if after <= w["start"] <= end + 3
-                    and (effects.is_laugh(w["word"]) or effects._norm(w["word"]) in effects.RAGE_WORDS)), None)
-        if hit:
-            beats["break_character"] = float(hit["start"])
+        # Gemini missed the break: the phrase with the first laugh / swear after
+        # the act started ends it ("...why you have to die? MIKA YOU PIECE OF SHIT")
+        after = float(beats.get("trigger") or start) + 2.0
+        inside = [w for w in words if after <= w["start"] <= end + 3]
+        i = next((k for k, w in enumerate(inside)
+                  if effects.is_laugh(w["word"]) or effects._norm(w["word"]) in effects.RAGE_WORDS), None)
+        if i is not None:
+            j = i
+            while j > 0 and inside[j]["start"] - inside[j - 1]["end"] < 0.35 \
+                    and inside[i]["start"] - inside[j - 1]["start"] <= 2.0:
+                j -= 1
+            beats["break_character"] = float(inside[j]["start"])
             beats["ending"] = "break_character_cut"
     if clip.get("kind") == "rage" and beats.get("reaction_end"):
         end = max(end, float(beats["reaction_end"]) + 0.4)

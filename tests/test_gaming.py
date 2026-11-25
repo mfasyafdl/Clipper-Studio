@@ -235,10 +235,11 @@ def test_json_ignores_trailing_text():
 
 
 def test_fake_cry_break_fallback_and_length_cap():
-    words = _w("huhu sedih banget", 6500.0, 0.8) + _w("kenapa aku", 6520.0) + _w("Micah you piece of shit", 6538.0)
-    c = moments.finalize({"start": 6498.5, "payoff": 6510.0, "end": 6540.3, "kind": "fake_cry",
+    words = _w("huhu sedih banget", 6500.0, 0.8) + _w("kenapa aku", 6520.0) + _w("Mika you piece of shit.", 6538.0)
+    # Gemini put the payoff ON the punchline and gave no break (audit clip 5 v4)
+    c = moments.finalize({"start": 6498.5, "payoff": 6538.5, "end": 6540.3, "kind": "fake_cry",
                           "beats": {"trigger": 6500.0, "break_character": None}}, 99999, words)
-    assert c["beats"]["break_character"] == pytest.approx(6539.6)
+    assert c["beats"]["break_character"] == pytest.approx(6538.0)  # start of the phrase, not "shit"
     assert c["beats"]["ending"] == "break_character_cut"
     assert c["end"] - c["start"] <= 39
 
@@ -246,3 +247,18 @@ def test_fake_cry_break_fallback_and_length_cap():
 def test_save_clips_handles_numpy(tmp_path):
     pipeline.save_clips(tmp_path, [{"cam": {"face_x": np.float32(0.5)}}])
     assert json.loads((tmp_path / "clips.json").read_text(encoding="utf-8"))[0]["cam"]["face_x"] == 0.5
+
+
+def test_stretched_whisper_word_is_capped():
+    from clipper import captions
+    out = captions.words_in_range([{"word": "sih?", "start": 13.4, "end": 30.8}], 10.0, 40.0)
+    assert out[0]["end"] - out[0]["start"] == pytest.approx(captions.MAX_WORD)
+
+
+def test_best_cam_prefers_solid_detection(tmp_path):
+    clips = [{"id": "clip_01", "cam": {"x": 1, "y": 1, "w": 2, "h": 2, "found": True, "face_x": .5, "face_y": .4, "hits": 16}},
+             {"id": "clip_02", "cam": {"x": 9, "y": 9, "w": 2, "h": 2, "found": True, "face_x": .5, "face_y": .4, "hits": 4}},
+             {"id": "clip_03", "cam": {"x": 5, "y": 5, "w": 2, "h": 2, "found": False}}]
+    pipeline.save_clips(tmp_path, clips)
+    assert pipeline.best_cam(tmp_path, "clip_02")["x"] == 1
+    assert pipeline.best_cam(tmp_path / "nope") is None
