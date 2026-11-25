@@ -31,7 +31,7 @@ main{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:
 .card.approve{border-color:var(--ok)}.card.reject{border-color:var(--no);opacity:.6}
 video{width:100%;aspect-ratio:9/16;background:#000;border-radius:10px}
 .meta{display:flex;justify-content:space-between;color:var(--mut);font-size:13px}
-.title{font-weight:650}.hook{color:#ffd60a}.text{color:var(--mut);font-size:13px;max-height:6em;overflow:auto}
+.title{font-weight:650}.plan{color:var(--mut);font-size:12px}.hook{color:#ffd60a}.text{color:var(--mut);font-size:13px;max-height:6em;overflow:auto}
 .row{display:flex;gap:8px;align-items:center}.row label{font-size:13px;color:var(--mut)}
 .row input[type=number]{width:70px;background:#000;color:#eee;border:1px solid var(--line);border-radius:6px;padding:4px}
 textarea{width:100%;min-height:52px;background:#000;color:#eee;border:1px solid var(--line);border-radius:8px;padding:6px;font:inherit}
@@ -54,7 +54,7 @@ function render(){
     el.innerHTML = `
       ${c.final ? `<video controls preload="metadata" src="${c.final}"></video>` : `<div class="err">Render gagal: ${c.error||"?"}</div>`}
       <div class="meta"><span>${c.id} · skor ${c.score ?? "?"}</span><span>${fmt(c.start)} → ${fmt(c.end)} (${(c.end-c.start).toFixed(0)} dtk)</span></div>
-      <div class="title"></div><div class="hook"></div><div class="text"></div>
+      <div class="title"></div><div class="hook"></div><div class="plan"></div><div class="text"></div>
       <div class="row verdict"><button class="approve ${d.verdict=="approve"?"on":""}" data-v="approve">✓ Pakai</button>
         <button class="reject ${d.verdict=="reject"?"on":""}" data-v="reject">✕ Buang</button></div>
       <div class="row"><label>Geser awal (dtk)</label><input type="number" step="0.5" data-k="trim_start" value="${d.trim_start}">
@@ -62,6 +62,8 @@ function render(){
       <textarea data-k="note" placeholder="Catatan untuk Claude, mis. 'ganti hook jadi ...'"></textarea>`;
     el.querySelector(".title").textContent = c.title || "";
     el.querySelector(".hook").textContent = c.hook ? "Hook: " + c.hook : "";
+    const kinds = {rage: "marah", fake_cry: "akting nangis", other: "lainnya"};
+    el.querySelector(".plan").textContent = c.applied_plan ? `Edit (${kinds[c.kind] || c.kind || "-"}): ${c.applied_plan.join(", ")}` : "";
     el.querySelector(".text").textContent = c.text || "";
     el.querySelector("textarea").value = d.note || "";
     el.querySelectorAll("[data-v]").forEach(b => b.onclick = () => { d.verdict = d.verdict == b.dataset.v ? "" : b.dataset.v; persist(); render(); });

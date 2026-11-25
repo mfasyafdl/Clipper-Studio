@@ -59,7 +59,11 @@ def _esc(text: str) -> str:
     return text.replace("\\", "").replace("{", "(").replace("}", ")").replace("\n", " ")
 
 
-def build_ass(words: list[dict], hook: str, duration: float, s: Settings, layout: str = "full") -> str:
+RAGE_COLOR = "&H002A2AFF"  # #FF2A2A in ASS BGR
+
+
+def build_ass(words: list[dict], hook: str, duration: float, s: Settings, layout: str = "full",
+              cards: list[tuple[float, float, str]] | None = None) -> str:
     """layout="full": captions low-middle, hook banner for the first seconds.
     layout="split": hook pinned the whole clip in the black header (0-210),
     captions on the facecam panel above the seam (chest height), inside the
@@ -85,6 +89,7 @@ ScaledBorderAndShadow: yes
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 {cap_style}
 {hook_style}
+Style: Card,Georgia,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,0,-1,0,0,100,100,0,0,1,4,2,8,100,180,1060,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -102,8 +107,18 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             f"Dialogue: 1,{_ts(0)},{_ts(end)},Hook,,0,0,0,,{{\\fad(120,200)\\fscx85\\fscy85\\t(0,140,\\fscx100\\fscy100)}}{hook_text}"
         )
 
+    for t, dur, text in cards or []:
+        events.append(f"Dialogue: 2,{_ts(t)},{_ts(min(duration, t + dur))},Card,,0,0,0,,{{\\fad(300,300)}}{_esc(text)}")
+
     for group in group_words(words, max_words=s.caption_words):
-        tokens = [_esc(w["word"].upper() if s.caption_uppercase else w["word"]) for w in group]
+        tokens = []
+        for w in group:
+            raw = w.get("display") or w["word"]
+            tok = _esc(raw.upper() if s.caption_uppercase else raw)
+            if w.get("rage"):  # angry / swear word: red, big, pop
+                tok = (f"{{\\c{RAGE_COLOR}\\fscx150\\fscy150\\t(0,120,\\fscx130\\fscy130)}}{tok}"
+                       f"{{\\c&H00FFFFFF&\\fscx100\\fscy100}}")
+            tokens.append(tok)
         for i, w in enumerate(group):
             start = w["start"]
             end = group[i + 1]["start"] if i + 1 < len(group) else w["end"]
@@ -111,7 +126,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 end = start + 0.05
             parts = []
             for j, tok in enumerate(tokens):
-                if j == i:
+                if j == i and not group[j].get("rage"):
                     parts.append(
                         f"{{\\c{s.caption_highlight}\\fscx112\\fscy112\\t(0,90,\\fscx100\\fscy100)}}{tok}{{\\c&H00FFFFFF&}}"
                     )

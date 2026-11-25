@@ -5,3 +5,5 @@ jobs/
 __pycache__/
 *.pyc
 sfx/*.wav
+music/*
+!music/README.md

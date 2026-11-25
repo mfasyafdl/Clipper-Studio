@@ -31,6 +31,10 @@ def main(argv: list[str] | None = None) -> int:
     m.add_argument("job")
     m.add_argument("--clips", type=int, default=5)
 
+    k = sub.add_parser("remake", help="tonton ulang klip tertentu dengan Gemini lalu render ulang pakai resep edit")
+    k.add_argument("job")
+    k.add_argument("ids", nargs="*", help="mis. clip_03 clip_05 (kosong = semua)")
+
     f = sub.add_parser("retry", help="ulangi klip yang gagal di tahap crop/caption")
     f.add_argument("job")
 
@@ -65,6 +69,11 @@ def main(argv: list[str] | None = None) -> int:
 
         job = rerun_moments(Path(args.job), args.clips, settings)
         print(f"\n[job] selesai. Audit dengan:  .\\run.ps1 review \"{job}\"")
+    elif args.cmd == "remake":
+        from .pipeline import remake_clips
+
+        done = remake_clips(Path(args.job), args.ids, settings)
+        print(f"[remake] selesai: {done or '-'}. Audit dengan:  .\\run.ps1 review \"{args.job}\"")
     elif args.cmd == "retry":
         from .pipeline import retry_failed
 

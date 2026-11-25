@@ -19,15 +19,36 @@ Dirancang dari riset clip Windah yang viral (laporan di folder project:
 2. **Gemini menilai lalu menonton.** Kandidat tanpa satu punchline jelas
    dibuang. Finalis ditonton Gemini (video 360p) untuk menentukan awal,
    punchline, dan akhir: horor menyimpan build-up 10-20 detik, lainnya
-   2-5 detik, selesai sekitar 1 detik setelah reaksi. Durasi 15-35 detik.
-   Judul gaya kutipan: `FREDDY: DULUAN BANG🗿 - MOMEN KOCAK WINDAH BASUDARA`.
+   2-5 detik. Akhir clip mengikuti reaksi: momen marah selesai 0,4 detik
+   setelah omelannya benar-benar habis, momen akting nangis sekitar 1 detik
+   setelah dia ketahuan ketawa. Tidak pernah memotong di tengah kata. Durasi
+   15-35 detik (maksimal 45). Gemini juga menandai jenis momen (`rage`,
+   `fake_cry`, `other`), detik pemicu, puncak, dan ledakan-ledakan kecil.
+   Judul gaya kutipan, kata kasar di judul/hook disensor (`ANJ*NG`):
+   `FREDDY: DULUAN BANG🗿 - MOMEN KOCAK WINDAH BASUDARA`.
 3. **Layout facecam besar.** Header hitam berisi hook, facecam 1080x790,
    gameplay 4:3 di bawah. Wajah dicari dengan YuNet hanya di pojok kamera,
    satu crop statis per klip (tidak loncat ke wajah di dalam game).
-4. **Efek di punchline saja.** `EFFECTS=light` (default): satu zoom di wajah
-   + satu SFX. `full` menambah shake/flash, `off` mematikan semua. SFX dibuat
-   sendiri oleh ffmpeg; taruh file sendiri di `sfx/` (mis. `sfx/boom.wav`)
-   untuk menggantinya.
+4. **Resep edit per jenis momen** (`EFFECTS=full`, default):
+   - **Marah/toxic:** hening panjang sebelum pemicu dipotong (jump cut),
+     push-in pelan selama build-up, lalu SATU crash zoom di ledakan terbesar
+     (masuk cepat lalu mendarat halus, ditahan sampai omelan selesai, keluar
+     pelan), getaran yang meredam, flash merah 3 frame, satu SFX boom.
+     Ledakan kecil lain dapat zoom kecil (maksimal 3 zoom per clip). Kata
+     kasar di subtitle merah dan besar; yang berat di-bleep (`CENSOR`).
+   - **Akting nangis:** dimainkan serius dulu: warna memudar ke hitam-putih,
+     vignette, zoom pelan, musik sedih, 1-2 teks ironis ("dia kehilangan
+     segalanya..."). Saat dia ketahuan ketawa: warna balik, musik berhenti
+     mendadak, crash zoom + record scratch. Tanpa momen ketawa: freeze lalu
+     fade.
+   - **Lainnya:** push-in + satu zoom + satu SFX di punchline.
+   `EFFECTS=light` memakai resep "lainnya" untuk semua, `off` mematikan
+   semua efek. SFX dibuat sendiri oleh ffmpeg; taruh file sendiri di `sfx/`
+   (mis. `sfx/boom.wav`) untuk menggantinya.
+5. **Musik sedih:** taruh satu lagu bebas hak cipta di `music/` dengan
+   "sad" di namanya (mis. `music/sad_piano.mp3`). Ambil dari YouTube Audio
+   Library, atau Pixabay Music yang TIDAK berlogo perisai (Content ID).
+   Tanpa file ini, momen nangis dirender tanpa musik.
 
 Mesin lama tetap ada: `ENGINE=ays` di `.env`.
 
@@ -90,6 +111,10 @@ bentrok), lalu mengecek apakah CUDA terdeteksi.
 # Pilih ulang momen + render ulang job lama dengan mesin gaming
 # (tanpa unduh/transkrip ulang; replay chat diunduh kalau belum ada)
 .\run.ps1 rerun "E:\VIdeo Clipping\20261124-XXXXXXXXXXX" --clips 5
+
+# Tonton ulang klip tertentu dengan Gemini lalu render ulang pakai resep edit
+# (hasilnya jadi versi baru, mis. clip_03_v2.mp4; versi lama tetap ada)
+.\run.ps1 remake "E:\VIdeo Clipping\20261124-XXXXXXXXXXX" clip_03 clip_05
 
 # Ulangi klip yang gagal (crop/caption)
 .\run.ps1 retry "E:\VIdeo Clipping\20261124-XXXXXXXXXXX"

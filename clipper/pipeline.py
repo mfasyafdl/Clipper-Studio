@@ -231,8 +231,6 @@ def apply_decisions(job_dir: Path, settings: Settings) -> dict:
             c["start"] = max(0.0, c["start"] + ts)
             c["end"] = max(c["start"] + 1.0, c["end"] + te)
             c["version"] = c.get("version", 1) + 1
-            if c.get("engine") == "gaming" and ts:
-                c["edit_plan"] = [{**e, "t": round(float(e["t"]) - ts, 2)} for e in c.get("edit_plan") or []]
             if new_hook:
                 c["hook"] = new_hook
             if (ts or te) and c.get("engine") != "gaming":
@@ -305,3 +303,45 @@ def rerun_moments(job_dir: Path, num_clips: int, settings: Settings) -> Path:
     save_clips(job_dir, clips)
     refresh_review(job_dir, clips)
     return job_dir
+
+
+def remake_clips(job_dir: Path, ids: list[str], settings: Settings) -> list[str]:
+    """Gemini watches chosen clips again (moment type, rant end, break of
+    character, outbursts) and they are re-rendered with the edit recipes as a
+    new version (clip_03_v2.mp4), so the old render stays for comparison."""
+    from . import moments
+
+    clips = load_clips(job_dir)
+    source = source_of(job_dir)
+    words = load_words(job_dir)
+    duration = _duration(source)
+    todo = [c for c in clips if c["id"] in ids or not ids]
+    for c in todo:
+        cand = {"peak": float(c.get("payoff") or (c["start"] + c["end"]) / 2), "category": c.get("category"),
+                "llm_score": c.get("score", 0), "reason": c.get("reason", "")}
+        print(f"[remake] Gemini menonton ulang {c['id']}: {c.get('title', '')}", flush=True)
+        try:
+            r = moments.stage_b(cand, source, words, settings, "Windah Basudara")
+        except Exception as e:
+            print(f"[remake] {c['id']}: gagal menonton ({e}); pakai batas lama", flush=True)
+            r = None
+        if r is None:
+            kind = c.get("kind") or moments.guess_kind(cand, words)
+            r = {"start": c["start"], "payoff": cand["peak"], "end": c["end"], "kind": kind,
+                 "beats": c.get("beats") or {"reaction_end": cand["peak"] + 2.5 if kind == "rage" else None}}
+        else:
+            # keep a human-approved title/hook, but take Gemini's when there was none
+            r["title"] = c.get("title") or moments.quote_title(moments.clean_text(r["title"]), settings.title_suffix)
+            r["hook"] = c.get("hook") or moments.clean_text(r.get("hook") or "").upper()
+        r = moments.finalize(r, duration, words)
+        c.update(start=r["start"], end=r["end"], payoff=r["payoff"], kind=r["kind"], beats=r["beats"],
+                 category=r.get("category", c.get("category")), title=r.get("title", c.get("title")),
+                 hook=r.get("hook", c.get("hook")), version=c.get("version", 1) + 1)
+        print(f"[remake] {c['id']}: {c['kind']}, {c['start']:.1f}-{c['end']:.1f}s", flush=True)
+    render_captions(job_dir, todo, words, settings)
+    for c in todo:
+        if c.get("applied_plan"):
+            print(f"[remake] {c['id']} v{c['version']}: " + ", ".join(c["applied_plan"]), flush=True)
+    save_clips(job_dir, clips)
+    refresh_review(job_dir, clips)
+    return [c["id"] for c in todo if c.get("final")]

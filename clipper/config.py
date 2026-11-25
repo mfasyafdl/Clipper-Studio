@@ -60,7 +60,8 @@ class Settings:
     chat_timeout_min: float = 30.0
     gemini_video: bool = True
     candidates: int = 40
-    effects: str = "light"  # off / light (1 punch-in + 1 sfx at the payoff) / full
+    effects: str = "full"  # off / light (1 punch-in + 1 sfx) / full (per-moment recipes)
+    censor: str = "heavy"  # off / heavy (bleep kontol, bangsat, ...) / all (also anjing, goblok, ...)
     title_suffix: str = " - MOMEN KOCAK WINDAH BASUDARA"
     jobs_dir: Path = field(default_factory=lambda: REPO_ROOT / "jobs")
     llm_env: dict[str, str] = field(default_factory=dict)
@@ -92,7 +93,8 @@ class Settings:
             chat_timeout_min=float(_get(env, "CHAT_TIMEOUT_MIN", "30")),
             gemini_video=_get(env, "GEMINI_VIDEO", "1") not in ("0", "false", "no"),
             candidates=int(_get(env, "CANDIDATES", "40")),
-            effects=_get(env, "EFFECTS", "light").lower(),
+            effects=_get(env, "EFFECTS", "full").lower(),
+            censor=_get(env, "CENSOR", "heavy").lower(),
             title_suffix=_get(env, "TITLE_SUFFIX", " - MOMEN KOCAK WINDAH BASUDARA"),
             jobs_dir=Path(_get(env, "JOBS_DIR", str(REPO_ROOT / "jobs"))),
             llm_env={k: v for k in llm_keys if (v := _get(env, k, ""))},

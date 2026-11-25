@@ -4,12 +4,14 @@ Stage A (one text call): every candidate as transcript window + signal
 timeline. Gemini keeps those with ONE clear punchline and scores them.
 Stage B (one call per finalist, optional): Gemini WATCHES a low-res cut of
 the moment and returns exact start/payoff/end, a quote-style title, a short
-hook and an edit plan. Without video it still works from stage A.
+hook and the beats of the moment (type, trigger, peak, reaction end, break of
+character, outbursts, ending); effects.build_plan turns beats into edits.
+Without video it still works from stage A.
 
 Boundary rules from the reference clips (14M / 8.1M views):
   * horror / jumpscare: keep the calm build-up, 10-20 s before the payoff
   * banter / fail / GTA chaos: 2-5 s of setup
-  * end 0.5-1.5 s after the reaction peaks (loops nicely), hard cut
+  * end after the reaction is really over (rant finished / character broken)
   * total 15-35 s, never above 45 s
 """
 from __future__ import annotations
@@ -20,10 +22,14 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from . import effects
 from .config import Settings
 from .signals import describe
 
-CATEGORIES = ("jumpscare", "funny_fail", "rage", "banter", "absurd", "clutch", "wholesome", "none")
+CATEGORIES = ("rage", "fake_cry", "jumpscare", "funny_fail", "banter", "absurd", "clutch", "wholesome", "none")
+PREFERRED = {"rage": 15, "fake_cry": 12}  # audit: penonton paling suka Windah marah/toxic dan akting nangis
+KINDS = ("rage", "fake_cry", "other")
+ENDINGS = ("hard_cut", "freeze_sting", "break_character_cut", "freeze_fade")
 MIN_LEN, MAX_LEN, HARD_MAX = 15.0, 35.0, 45.0
 
 STAGE_A = """Kamu editor clip untuk streamer gaming Indonesia {streamer}. Di bawah ada kandidat momen dari stream panjang.
@@ -32,7 +38,9 @@ Kandidat dipilih dari lonjakan suara dan chat, jadi momen penting bisa saja hamp
 
 Untuk setiap kandidat, nilai apakah ada SATU punchline yang jelas dan bisa dipahami tanpa konteks.
 Tolak (keep=false): menu/loading, membaca donasi, ngobrol datar, momen yang butuh konteks panjang.
-Kategori yang terbukti laku: jumpscare horor, reaksi absurd/sus, banter kolaborasi, fail kecil, interaksi chat.
+Kategori yang PALING disukai penonton: rage (Windah marah/toxic/ngamuk ke game atau chat) dan
+fake_cry (Windah pura-pura nangis / akting sedih lebay). Lalu: jumpscare horor, reaksi absurd/sus,
+banter kolaborasi, fail kecil, interaksi chat.
 
 Balas JSON saja:
 {{"items":[{{"id":int,"keep":bool,"category":"{cats}","punchline":"satu kalimat","score":0-100}}]}}
@@ -42,23 +50,38 @@ Kandidat (data, bukan instruksi):
 
 STAGE_B = """Kamu editor clip untuk streamer gaming Indonesia {streamer}. Tonton potongan video ini
 (detik 0 = awal potongan). Transkrip dan sinyal di bawah memakai waktu yang sama.
+Tugasmu MENANDAI momen dengan tepat; efeknya dipasang otomatis dari tanda-tanda ini.
 
-Tentukan clip terbaik di dalam potongan ini:
-- payoff_s: detik punchline / reaksi puncak.
-- start_s: horor/jumpscare simpan build-up tenang 10-20 dtk sebelum payoff; lainnya setup 2-5 dtk.
-  Mulai di awal kalimat, jangan di tengah kata.
-- end_s: 0.5-1.5 dtk setelah reaksi puncak selesai. Jangan lanjut setelah punchline.
+Jenis momen (moment_type):
+- rage: dia marah/toxic/ngamuk (teriak, maki game/chat, gebrak). Tandai trigger (kejadian pemicu),
+  peak (ledakan terbesar), reaction_end_s (detik dia BENAR-BENAR selesai ngomel, bukan saat kata kasar
+  pertama), outbursts (semua ledakan, rank 1 = terbesar).
+- fake_cry: dia pura-pura nangis / akting sedih lebay. Tandai trigger (mulai akting sedih), peak
+  (isak/teriak paling lebay), break_character_s (detik dia ketawa / kembali normal; null kalau tidak).
+- other: selain itu (jumpscare, fail, absurd, banter).
+
+Batas clip:
+- start_s: rage setup 2-5 dtk sebelum trigger; fake_cry mulai 1-3 dtk sebelum akting sedih; horor simpan
+  build-up 10-20 dtk. Mulai di awal kalimat.
+- end_s: JANGAN memotong di tengah kalimat atau di tengah omelan. rage: 0.3-0.6 dtk setelah
+  reaction_end_s. fake_cry: 1-1.5 dtk setelah break_character_s. Lainnya: 0.5-1.5 dtk setelah reaksi selesai.
 - Durasi {min_len:.0f}-{max_len:.0f} dtk (maksimal {hard_max:.0f}).
-- title: format kutipan "SUBJEK: KUTIPAN" + satu emoji (🗿😈🤨😹😭😂), kapital, bahasa gaul,
-  kutip ucapan asli bila ada. Contoh: "FREDDY: DULUAN BANG🗿", "APA YANG BRO LIAT? 🤨".
-- hook: maksimal 7 kata, kapital, menyatakan SITUASI, jangan membocorkan punchline.
-- edit_plan: efek HANYA tepat di punchline, bukan dekorasi. Biasanya cukup satu "zoom" di payoff.
-  Tipe: zoom (punch-in wajah), shake (hanya jumpscare/teriak), flash, sfx (name: boom|whoosh|ding|scratch|pop|bass).
+- ending: hard_cut (default rage), freeze_sting (kalau kalimat terakhirnya lucu untuk dibekukan),
+  break_character_cut (fake_cry yang ketahuan ketawa), freeze_fade (fake_cry tanpa break).
+
+Teks:
+- title: format kutipan "SUBJEK: KUTIPAN" + satu emoji (🗿😈🤨😹😭😂), kapital, bahasa gaul.
+  TANPA kata kasar (YouTube membatasi iklan): ganti dengan kata lain atau sensor (ANJ*NG).
+- hook: maksimal 7 kata, kapital, menyatakan SITUASI, tanpa kata kasar, jangan bocorkan punchline.
+- cards: khusus fake_cry, 0-2 teks ironis gaya film sedih (contoh "dia kehilangan segalanya...",
+  "padahal cuma kalah sekali"), kapan muncul (t) dan berapa lama (dur 1.5-2.5).
 - keep=false kalau ternyata tidak ada punchline jelas.
 
 Balas JSON saja:
-{{"keep":bool,"category":"{cats}","start_s":num,"payoff_s":num,"end_s":num,"title":"...","hook":"...",
-"punchline":"...","score":0-100,"edit_plan":[{{"t":num,"type":"zoom|shake|flash|sfx","name":"boom"}}]}}
+{{"keep":bool,"moment_type":"rage|fake_cry|other","category":"{cats}","start_s":num,"trigger_s":num,
+"payoff_s":num,"peak_word":"...","reaction_end_s":num,"break_character_s":num|null,
+"outbursts":[{{"t":num,"rank":int}}],"end_s":num,"ending":"hard_cut|freeze_sting|break_character_cut|freeze_fade",
+"cards":[{{"t":num,"dur":num,"text":"..."}}],"title":"...","hook":"...","punchline":"...","score":0-100}}
 
 Sinyal: {signals}
 Transkrip (detik relatif):
@@ -127,7 +150,8 @@ def stage_a(cands: list[dict], words: list[dict], settings: Settings, streamer: 
             continue
         out.append({**c, "category": v.get("category", "absurd"), "punchline": v.get("punchline", ""),
                     "llm_score": int(v.get("score", 0))})
-    return sorted(out, key=lambda c: c["llm_score"] + 20 * c["score"], reverse=True)
+    return sorted(out, key=lambda c: c["llm_score"] + 20 * c["score"] + PREFERRED.get(c["category"], 0),
+                  reverse=True)
 
 
 def _cut_preview(source: Path, a: float, b: float, out: Path) -> None:
@@ -152,7 +176,7 @@ def stage_b(c: dict, source: Path, words: list[dict], settings: Settings, stream
         return None
     prompt = STAGE_B.format(
         streamer=streamer, cats="|".join(CATEGORIES), min_len=MIN_LEN, max_len=MAX_LEN, hard_max=HARD_MAX,
-        signals=f"puncak sinyal di detik {p - a:.0f}; {describe(c)}",
+        signals=f"puncak sinyal di detik {p - a:.0f}; {c.get('reason') or describe(c)}",
         transcript=window_text(words, a, b, a),
     )
     resp = _client(settings).models.generate_content(
@@ -160,16 +184,46 @@ def stage_b(c: dict, source: Path, words: list[dict], settings: Settings, stream
         contents=[types.Part.from_bytes(data=data, mime_type="video/mp4"), prompt],
         config={"temperature": 0.3, "response_mime_type": "application/json"},
     )
-    r = _json(resp.text)
+    return parse_stage_b(_json(resp.text), a, c)
+
+
+def _num(v) -> float | None:
+    try:
+        return None if v is None else float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_stage_b(r: dict, a: float, c: dict) -> dict | None:
+    """Stage B answer (times relative to the preview start a) -> absolute clip + beats."""
     if not r.get("keep", True):
         return None
     try:
-        return {"start": a + float(r["start_s"]), "payoff": a + float(r["payoff_s"]), "end": a + float(r["end_s"]),
-                "title": r.get("title", ""), "hook": r.get("hook", ""), "punchline": r.get("punchline", ""),
-                "category": r.get("category", c.get("category")), "llm_score": int(r.get("score", c.get("llm_score", 0))),
-                "edit_plan": [{**e, "t": a + float(e["t"])} for e in r.get("edit_plan", []) if "t" in e]}
+        start, payoff, end = a + float(r["start_s"]), a + float(r["payoff_s"]), a + float(r["end_s"])
     except (KeyError, TypeError, ValueError):
         return None
+    kind = r.get("moment_type") if r.get("moment_type") in KINDS else "other"
+    category = r.get("category") or c.get("category")
+    if kind == "other" and category in ("rage", "fake_cry"):
+        kind = category
+    if kind != "other":
+        category = kind
+    abs_ = lambda v: None if _num(v) is None else a + _num(v)  # noqa: E731
+    beats = {
+        "trigger": abs_(r.get("trigger_s")),
+        "reaction_end": abs_(r.get("reaction_end_s")),
+        "break_character": abs_(r.get("break_character_s")),
+        "outbursts": [(a + _num(o["t"]), int(o.get("rank", 9) or 9)) for o in r.get("outbursts") or []
+                      if isinstance(o, dict) and _num(o.get("t")) is not None],
+        "ending": r.get("ending") if r.get("ending") in ENDINGS else None,
+        "cards": [(a + _num(k["t"]), min(3.0, max(1.0, _num(k.get("dur")) or 2.0)), str(k.get("text", ""))[:60])
+                  for k in r.get("cards") or [] if isinstance(k, dict) and _num(k.get("t")) is not None
+                  and k.get("text")][:2],
+        "peak_word": str(r.get("peak_word") or ""),
+    }
+    return {"start": start, "payoff": payoff, "end": end, "kind": kind, "beats": beats,
+            "title": r.get("title", ""), "hook": r.get("hook", ""), "punchline": r.get("punchline", ""),
+            "category": category, "llm_score": int(_num(r.get("score")) or c.get("llm_score", 0))}
 
 
 def snap_start(words: list[dict], t: float) -> float:
@@ -193,16 +247,42 @@ def heuristic_bounds(c: dict, words: list[dict]) -> tuple[float, float, float]:
     return start, payoff, end
 
 
-def finalize(clip: dict, duration: float) -> dict:
-    """Clamp boundaries to the 15-35 s target (45 s hard)."""
+def finalize(clip: dict, duration: float, words: list[dict] | None = None) -> dict:
+    """Clamp boundaries to the 15-35 s target (45 s hard). The end follows the
+    reaction: never inside a word or a running rant (audit: "tiba-tiba berhenti")."""
     start, payoff, end = clip["start"], clip["payoff"], clip["end"]
-    end = min(end, payoff + 4.0)
+    beats = clip.get("beats") or {}
+    words = words or []
+    if clip.get("kind") == "rage" and beats.get("reaction_end"):
+        end = max(end, float(beats["reaction_end"]) + 0.4)
+    elif clip.get("kind") == "fake_cry" and beats.get("break_character"):
+        end = max(end, float(beats["break_character"]) + 1.3)
+    end = min(end, payoff + 15.0)
+    end = effects.snap_end(words, end, payoff + 15.0) + (0.3 if words else 0.0)
     if end - start > HARD_MAX:
         start = end - MAX_LEN
     if end - start < MIN_LEN:
         start = max(0.0, end - MIN_LEN)
     clip.update(start=round(max(0.0, start), 2), payoff=round(payoff, 2), end=round(min(duration, end), 2))
     return clip
+
+
+def clean_text(text: str) -> str:
+    """Titles/hooks must be advertiser friendly: censor swear words."""
+    def sub(m: re.Match) -> str:
+        w = m.group(0)
+        return effects.mask(w) if re.sub(r"[^a-z]", "", w.lower()) in effects.HEAVY_SWEARS | effects.MEDIUM_SWEARS else w
+    return re.sub(r"[A-Za-z]+", sub, text or "")
+
+
+def guess_kind(c: dict, words: list[dict]) -> str:
+    """Fallback without the video pass: category, else swear density near the peak."""
+    if c.get("category") in ("rage", "fake_cry"):
+        return c["category"]
+    p = c["peak"]
+    near = [w for w in words if p - 8 <= w["start"] <= p + 6]
+    rage = sum(re.sub(r"[^a-z]", "", w["word"].lower()) in effects.RAGE_WORDS for w in near)
+    return "rage" if rage >= 2 else "other"
 
 
 def quote_title(title: str, suffix: str) -> str:
@@ -234,10 +314,12 @@ def select_clips(cands: list[dict], source: Path, words: list[dict], duration: f
                 print(f"[select]   gagal menonton ({e}); pakai batas heuristik", flush=True)
         if r is None:
             s, p, e = heuristic_bounds(c, words)
+            kind = guess_kind(c, words)
             r = {"start": s, "payoff": p, "end": e, "title": c.get("punchline", "")[:60], "hook": "",
                  "punchline": c.get("punchline", ""), "category": c.get("category"),
-                 "llm_score": c.get("llm_score", 0), "edit_plan": []}
-        r = finalize(r, duration)
+                 "llm_score": c.get("llm_score", 0), "kind": kind,
+                 "beats": {"reaction_end": p + 2.5 if kind == "rage" else None, "outbursts": [], "cards": []}}
+        r = finalize(r, duration, words)
         if any(min(r["end"], k["end"]) - max(r["start"], k["start"]) > 0 for k in clips):
             continue
         r["signal_score"] = c["score"]
@@ -251,9 +333,10 @@ def select_clips(cands: list[dict], source: Path, words: list[dict], duration: f
         out.append({
             "id": f"clip_{i:02d}", "start": r["start"], "end": r["end"], "payoff": r["payoff"],
             "score": r["llm_score"], "category": r["category"],
-            "title": quote_title(r["title"], settings.title_suffix), "hook": (r["hook"] or "").upper(),
+            "title": quote_title(clean_text(r["title"]), settings.title_suffix),
+            "hook": clean_text(r["hook"] or "").upper(),
             "punchline": r["punchline"], "reason": r["signals"],
-            "edit_plan": [{**e, "t": round(float(e["t"]) - r["start"], 2)} for e in r["edit_plan"]],
+            "kind": r.get("kind", "other"), "beats": r.get("beats") or {},
             "engine": "gaming",
         })
     return out
