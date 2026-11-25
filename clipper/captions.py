@@ -59,7 +59,21 @@ def _esc(text: str) -> str:
     return text.replace("\\", "").replace("{", "(").replace("}", ")").replace("\n", " ")
 
 
-def build_ass(words: list[dict], hook: str, duration: float, s: Settings) -> str:
+def build_ass(words: list[dict], hook: str, duration: float, s: Settings, layout: str = "full") -> str:
+    """layout="full": captions low-middle, hook banner for the first seconds.
+    layout="split": hook pinned the whole clip in the black header (0-210),
+    captions on the facecam panel above the seam (chest height), inside the
+    TikTok safe zone (right-side button column kept clear)."""
+    if layout == "split":
+        cap_style = (f"Style: Caption,{s.caption_font},{s.caption_size},&H00FFFFFF,&H00FFFFFF,&H00000000,"
+                     f"&H64000000,-1,0,0,0,100,100,0,0,1,7,3,2,120,180,1080,1")
+        hook_style = (f"Style: Hook,{s.caption_font},{s.hook_size},&H00FFFFFF,&H00FFFFFF,&H00000000,"
+                      f"&H00000000,-1,0,0,0,100,100,0,0,1,4,0,5,60,60,0,1")
+    else:
+        cap_style = (f"Style: Caption,{s.caption_font},{s.caption_size},&H00FFFFFF,&H00FFFFFF,&H00000000,"
+                     f"&H64000000,-1,0,0,0,100,100,0,0,1,7,3,2,80,80,560,1")
+        hook_style = (f"Style: Hook,{s.caption_font},{s.hook_size},&H00000000,&H00000000,&H0000E5FF,"
+                      f"&H0000E5FF,-1,0,0,0,100,100,0,0,3,18,0,8,90,90,230,1")
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {PLAY_W}
@@ -69,14 +83,19 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,{s.caption_font},{s.caption_size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,7,3,2,80,80,560,1
-Style: Hook,{s.caption_font},{s.hook_size},&H00000000,&H00000000,&H0000E5FF,&H0000E5FF,-1,0,0,0,100,100,0,0,3,18,0,8,90,90,230,1
+{cap_style}
+{hook_style}
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     events: list[str] = []
-    if hook and s.hook_seconds > 0:
+    if hook and layout == "split":
+        hook_text = _esc(hook.upper() if s.caption_uppercase else hook)
+        events.append(
+            f"Dialogue: 1,{_ts(0)},{_ts(duration)},Hook,,0,0,0,,{{\\pos(540,105)\\fscx85\\fscy85\\t(0,140,\\fscx100\\fscy100)}}{hook_text}"
+        )
+    elif hook and s.hook_seconds > 0:
         hook_text = _esc(hook.upper() if s.caption_uppercase else hook)
         end = min(duration, s.hook_seconds)
         events.append(

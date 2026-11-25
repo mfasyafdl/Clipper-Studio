@@ -83,7 +83,7 @@ Step "Virtualenv untuk WhisperX + yt-dlp dengan CUDA 12.8 (.venv-wx), unduhan be
 if (-not (Test-Path ".venv-wx")) { Invoke-Expression "$py -m venv .venv-wx" }
 & .\.venv-wx\Scripts\python.exe -m pip install --upgrade pip
 & .\.venv-wx\Scripts\python.exe -m pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url $TorchIndex
-& .\.venv-wx\Scripts\python.exe -m pip install "whisperx[fast]" yt-dlp opentimelineio
+& .\.venv-wx\Scripts\python.exe -m pip install "whisperx[fast]" yt-dlp opentimelineio google-genai "opencv-python>=4.8,<5" numpy
 
 Step "Cek CUDA dari Python"
 & .\.venv-wx\Scripts\python.exe -c "import torch; ok=torch.cuda.is_available(); print('CUDA:', ok, torch.cuda.get_device_name(0) if ok else '(tidak ada, akan pakai CPU)')"

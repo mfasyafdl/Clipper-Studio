@@ -4,3 +4,4 @@ vendor/
 jobs/
 __pycache__/
 *.pyc
+sfx/*.wav

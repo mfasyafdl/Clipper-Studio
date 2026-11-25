@@ -7,7 +7,31 @@ dengan subtitle animasi per kata dan hook di awal, lalu kamu audit sebelum dipos
 > clipping resmi mereka, bisa membuat klipmu kena klaim hak cipta dan tidak bisa
 > dimonetisasi. Alat ini tidak menyelesaikan masalah itu.
 
-## Alurnya
+## Mesin `gaming` (default)
+
+Dirancang dari riset clip Windah yang viral (laporan di folder project:
+`research/reports/`):
+
+1. **Momen dari reaksi, bukan dari kata-kata.** Replay chat YouTube
+   (penulis unik per 8 detik, digeser mundur 10 detik), lonjakan suara
+   "hening lalu teriak", heatmap Most Replayed, dan kata reaksi (anjir,
+   wkwk, aaa) digabung jadi skor per detik. 40 puncak teratas jadi kandidat.
+2. **Gemini menilai lalu menonton.** Kandidat tanpa satu punchline jelas
+   dibuang. Finalis ditonton Gemini (video 360p) untuk menentukan awal,
+   punchline, dan akhir: horor menyimpan build-up 10-20 detik, lainnya
+   2-5 detik, selesai sekitar 1 detik setelah reaksi. Durasi 15-35 detik.
+   Judul gaya kutipan: `FREDDY: DULUAN BANG🗿 - MOMEN KOCAK WINDAH BASUDARA`.
+3. **Layout facecam besar.** Header hitam berisi hook, facecam 1080x790,
+   gameplay 4:3 di bawah. Wajah dicari dengan YuNet hanya di pojok kamera,
+   satu crop statis per klip (tidak loncat ke wajah di dalam game).
+4. **Efek di punchline saja.** `EFFECTS=light` (default): satu zoom di wajah
+   + satu SFX. `full` menambah shake/flash, `off` mematikan semua. SFX dibuat
+   sendiri oleh ffmpeg; taruh file sendiri di `sfx/` (mis. `sfx/boom.wav`)
+   untuk menggantinya.
+
+Mesin lama tetap ada: `ENGINE=ays` di `.env`.
+
+## Alurnya (mesin lama `ays`)
 
 ```
 URL / file
@@ -62,6 +86,10 @@ bentrok), lalu mengecek apakah CUDA terdeteksi.
 
 # 3. Terapkan keputusanmu (trim, ganti hook, kumpulkan yang dipakai)
 .\run.ps1 apply "E:\VIdeo Clipping\20261124-XXXXXXXXXXX"
+
+# Pilih ulang momen + render ulang job lama dengan mesin gaming
+# (tanpa unduh/transkrip ulang; replay chat diunduh kalau belum ada)
+.\run.ps1 rerun "E:\VIdeo Clipping\20261124-XXXXXXXXXXX" --clips 5
 
 # Ulangi klip yang gagal (crop/caption)
 .\run.ps1 retry "E:\VIdeo Clipping\20261124-XXXXXXXXXXX"

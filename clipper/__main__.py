@@ -27,6 +27,10 @@ def main(argv: list[str] | None = None) -> int:
     a = sub.add_parser("apply", help="terapkan decisions.json (trim, ganti hook, kumpulkan yang dipakai)")
     a.add_argument("job")
 
+    m = sub.add_parser("rerun", help="pilih ulang momen + render ulang job lama (tanpa unduh/transkrip ulang)")
+    m.add_argument("job")
+    m.add_argument("--clips", type=int, default=5)
+
     f = sub.add_parser("retry", help="ulangi klip yang gagal di tahap crop/caption")
     f.add_argument("job")
 
@@ -56,6 +60,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[apply] klip dipakai ({len(result['approved'])}): folder approved/")
         if result["notes"]:
             print("[apply] ada catatan yang butuh edit manual: notes_for_claude.md")
+    elif args.cmd == "rerun":
+        from .pipeline import rerun_moments
+
+        job = rerun_moments(Path(args.job), args.clips, settings)
+        print(f"\n[job] selesai. Audit dengan:  .\\run.ps1 review \"{job}\"")
     elif args.cmd == "retry":
         from .pipeline import retry_failed
 

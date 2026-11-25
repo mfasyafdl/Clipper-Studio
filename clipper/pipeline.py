@@ -59,11 +59,39 @@ def download(url: str, job_dir: Path, max_height: int = 1080) -> Path:
             raise RuntimeError("yt-dlp selesai tapi file video tidak ditemukan")
         path = found[0]
     (job_dir / "source_info.json").write_text(
-        json.dumps({k: info.get(k) for k in ("id", "title", "uploader", "webpage_url", "duration")},
+        json.dumps({k: info.get(k) for k in ("id", "title", "uploader", "webpage_url", "duration", "heatmap")},
                    ensure_ascii=False, indent=1),
         encoding="utf-8",
     )
     return path
+
+
+def start_chat_download(url: str, job_dir: Path) -> subprocess.Popen | None:
+    """Live-chat replay is slow to fetch (sequential pages), so run it in the
+    background while WhisperX transcribes. A partial file is still usable."""
+    if Path(url).expanduser().exists() or list(job_dir.glob("*.live_chat.json")):
+        return None
+    import sys
+
+    cmd = [sys.executable, "-m", "yt_dlp", "--skip-download", "--write-subs", "--sub-langs", "live_chat",
+           "--no-playlist", "-o", str(job_dir / "chat_%(id)s.%(ext)s"), url]
+    print("[chat] mengunduh replay chat di latar belakang", flush=True)
+    log = open(job_dir / "chat_download.log", "w", encoding="utf-8")
+    return subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
+
+
+def wait_chat(proc: subprocess.Popen | None, job_dir: Path, timeout_min: float) -> Path | None:
+    import time
+
+    if proc is not None:
+        deadline = time.time() + timeout_min * 60
+        while proc.poll() is None and time.time() < deadline:
+            time.sleep(5)
+        if proc.poll() is None:
+            print(f"[chat] belum selesai setelah {timeout_min:.0f} menit; pakai chat yang sudah terunduh", flush=True)
+            proc.kill()
+    found = sorted(job_dir.glob("*.live_chat.json*"))
+    return found[0] if found else None
 
 
 def new_job_dir(url: str, settings: Settings) -> Path:
@@ -89,10 +117,21 @@ def render_captions(job_dir: Path, clips: list[dict], words: list[dict], setting
     final_dir = job_dir / "final"
     final_dir.mkdir(exist_ok=True)
     for c in clips:
-        if not c.get("vertical"):
-            continue
         version = c.get("version", 1)
         name = c["id"] if version == 1 else f"{c['id']}_v{version}"
+        if c.get("engine") == "gaming":
+            from .render import render_gaming
+
+            print(f"[render] {name}: {c.get('title', '')}", flush=True)
+            try:
+                info = render_gaming(job_dir, source_of(job_dir), c, words, settings, name, settings.video_encoder)
+                c.update({**info, "error": None})
+            except Exception as e:
+                print(f"[render] {name} gagal: {e}", flush=True)
+                c.update({"final": None, "error": str(e)})
+            continue
+        if not c.get("vertical"):
+            continue
         print(f"[captions] {name}: {c.get('title', '')}", flush=True)
         try:
             info = captions.caption_clip(
@@ -127,12 +166,38 @@ def refresh_review(job_dir: Path, clips: list[dict]) -> None:
     review.write_otio(job_dir, source, clips, _probe_fps(source))
 
 
+def _duration(path: Path) -> float:
+    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of",
+                          "default=nw=1:nk=1", str(path)], capture_output=True, text=True).stdout.strip()
+    return float(out or 0)
+
+
+def gaming_moments(job_dir: Path, source: Path, num_clips: int, settings: Settings,
+                   chat_proc: subprocess.Popen | None = None) -> list[dict]:
+    from . import moments, signals
+
+    words = load_words(job_dir)
+    info_path = job_dir / "source_info.json"
+    info = json.loads(info_path.read_text(encoding="utf-8")) if info_path.exists() else {}
+    chat_path = wait_chat(chat_proc, job_dir, settings.chat_timeout_min) if settings.use_chat else None
+    duration = _duration(source)
+    cands, debug = signals.find_candidates(source, words, duration, settings.candidates, chat_path, info.get("heatmap"))
+    (job_dir / "candidates.json").write_text(json.dumps({"debug": debug, "candidates": cands}, indent=1),
+                                             encoding="utf-8")
+    print(f"[signals] {len(cands)} kandidat dari sinyal: {', '.join(debug['signals'])}", flush=True)
+    return moments.select_clips(cands, source, words, duration, num_clips, settings)
+
+
 def run(url: str, num_clips: int, settings: Settings) -> Path:
     job_dir = new_job_dir(url, settings)
     print(f"[job] folder: {job_dir}", flush=True)
+    chat_proc = start_chat_download(url, job_dir) if settings.engine == "gaming" and settings.use_chat else None
     source = download(url, job_dir)
     transcribe.transcribe(source, job_dir, settings)
-    clips = highlights.run_ays(source, job_dir, num_clips, settings)
+    if settings.engine == "gaming":
+        clips = gaming_moments(job_dir, source, num_clips, settings, chat_proc)
+    else:
+        clips = highlights.run_ays(source, job_dir, num_clips, settings)
     render_captions(job_dir, clips, load_words(job_dir), settings)
     save_clips(job_dir, clips)
     refresh_review(job_dir, clips)
@@ -166,9 +231,11 @@ def apply_decisions(job_dir: Path, settings: Settings) -> dict:
             c["start"] = max(0.0, c["start"] + ts)
             c["end"] = max(c["start"] + 1.0, c["end"] + te)
             c["version"] = c.get("version", 1) + 1
+            if c.get("engine") == "gaming" and ts:
+                c["edit_plan"] = [{**e, "t": round(float(e["t"]) - ts, 2)} for e in c.get("edit_plan") or []]
             if new_hook:
                 c["hook"] = new_hook
-            if ts or te:
+            if (ts or te) and c.get("engine") != "gaming":
                 vertical = f"short_{c['id']}_v{c['version']}.mp4"
                 print(f"[apply] potong ulang {c['id']} -> {c['start']:.1f}s..{c['end']:.1f}s", flush=True)
                 highlights.recrop(source, c["start"], c["end"], job_dir / vertical, settings)
@@ -205,6 +272,8 @@ def retry_failed(job_dir: Path, settings: Settings) -> list[str]:
     source = source_of(job_dir)
     todo = [c for c in clips if not c.get("final")]
     for c in todo:
+        if c.get("engine") == "gaming":
+            continue
         if not c.get("vertical") or not (job_dir / c["vertical"]).exists():
             vertical = f"short_{c['id']}_retry.mp4"
             print(f"[retry] crop ulang {c['id']}: {c.get('title', '')}", flush=True)
@@ -214,7 +283,25 @@ def retry_failed(job_dir: Path, settings: Settings) -> list[str]:
             except Exception as e:
                 c["error"] = str(e)
                 print(f"[retry] {c['id']} masih gagal: {e}", flush=True)
-    render_captions(job_dir, [c for c in todo if c.get("vertical")], load_words(job_dir), settings)
+    render_captions(job_dir, [c for c in todo if c.get("vertical") or c.get("engine") == "gaming"],
+                    load_words(job_dir), settings)
     save_clips(job_dir, clips)
     refresh_review(job_dir, clips)
     return [c["id"] for c in todo if c.get("final")]
+
+
+def rerun_moments(job_dir: Path, num_clips: int, settings: Settings) -> Path:
+    """Redo moment picking + rendering on an existing job (no re-download, no
+    re-transcription). Fetches the chat replay if it isn't there yet."""
+    source = source_of(job_dir)
+    info_path = job_dir / "source_info.json"
+    url = json.loads(info_path.read_text(encoding="utf-8")).get("webpage_url") if info_path.exists() else None
+    chat_proc = start_chat_download(url, job_dir) if url and settings.use_chat else None
+    old = job_dir / "clips.json"
+    if old.exists():
+        old.replace(job_dir / f"clips_old_{datetime.now():%H%M%S}.json")
+    clips = gaming_moments(job_dir, source, num_clips, settings, chat_proc)
+    render_captions(job_dir, clips, load_words(job_dir), settings)
+    save_clips(job_dir, clips)
+    refresh_review(job_dir, clips)
+    return job_dir

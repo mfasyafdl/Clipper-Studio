@@ -8,6 +8,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 VENDOR_DIR = REPO_ROOT / "vendor"
 AYS_DIR = VENDOR_DIR / "AI-Youtube-Shorts-Generator"
+MODELS_DIR = VENDOR_DIR / "models"
 
 
 def _ays_python() -> Path:
@@ -53,6 +54,14 @@ class Settings:
     hook_seconds: float = 3.0
     hook_size: int = 62
     video_encoder: str = "auto"  # auto / h264_nvenc / libx264
+    engine: str = "gaming"  # gaming (signals + split layout + effects) / ays (old path)
+    layout_preset: str = "windah"
+    use_chat: bool = True
+    chat_timeout_min: float = 30.0
+    gemini_video: bool = True
+    candidates: int = 40
+    effects: str = "light"  # off / light (1 punch-in + 1 sfx at the payoff) / full
+    title_suffix: str = " - MOMEN KOCAK WINDAH BASUDARA"
     jobs_dir: Path = field(default_factory=lambda: REPO_ROOT / "jobs")
     llm_env: dict[str, str] = field(default_factory=dict)
 
@@ -77,6 +86,14 @@ class Settings:
             hook_seconds=float(_get(env, "HOOK_SECONDS", "3")),
             hook_size=int(_get(env, "HOOK_SIZE", "62")),
             video_encoder=_get(env, "VIDEO_ENCODER", "auto"),
+            engine=_get(env, "ENGINE", "gaming"),
+            layout_preset=_get(env, "LAYOUT_PRESET", "windah"),
+            use_chat=_get(env, "USE_CHAT", "1") not in ("0", "false", "no"),
+            chat_timeout_min=float(_get(env, "CHAT_TIMEOUT_MIN", "30")),
+            gemini_video=_get(env, "GEMINI_VIDEO", "1") not in ("0", "false", "no"),
+            candidates=int(_get(env, "CANDIDATES", "40")),
+            effects=_get(env, "EFFECTS", "light").lower(),
+            title_suffix=_get(env, "TITLE_SUFFIX", " - MOMEN KOCAK WINDAH BASUDARA"),
             jobs_dir=Path(_get(env, "JOBS_DIR", str(REPO_ROOT / "jobs"))),
             llm_env={k: v for k in llm_keys if (v := _get(env, k, ""))},
         )
