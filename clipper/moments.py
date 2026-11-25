@@ -283,9 +283,14 @@ def finalize(clip: dict, duration: float, words: list[dict] | None = None) -> di
         end = max(end, float(beats["reaction_end"]) + 0.4)
     elif clip.get("kind") == "fake_cry" and beats.get("break_character"):
         end = max(end, float(beats["break_character"]) + 1.3)
-    end = min(end, payoff + 15.0)
-    end = effects.snap_end(words, end, payoff + 15.0) + (0.3 if words else 0.0)
-    if end - start > HARD_MAX or (clip.get("kind") in ("rage", "fake_cry") and end - start > MAX_LEN):
+    # the act can run long before the break ("Arthur... why you have to die? MIKA ..."):
+    # the cap follows the break, not the sob peak
+    cap = payoff + 15.0
+    if clip.get("kind") == "fake_cry" and beats.get("break_character"):
+        cap = max(cap, float(beats["break_character"]) + 2.0)
+    end = min(end, cap)
+    end = effects.snap_end(words, end, cap) + (0.3 if words else 0.0)
+    if end - start > HARD_MAX:  # rage / fake_cry dead air is squeezed later by the jump cuts
         start = snap_start(words, end - MAX_LEN)
     elif clip.get("kind") in ("rage", "fake_cry") and any(
             w["start"] < start < min(w["end"], w["start"] + 1.2) + 0.4 for w in words):

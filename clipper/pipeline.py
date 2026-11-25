@@ -319,7 +319,7 @@ def rerun_moments(job_dir: Path, num_clips: int, settings: Settings) -> Path:
     return job_dir
 
 
-def remake_clips(job_dir: Path, ids: list[str], settings: Settings) -> list[str]:
+def remake_clips(job_dir: Path, ids: list[str], settings: Settings, same: bool = False) -> list[str]:
     """Gemini watches chosen clips again (moment type, rant end, break of
     character, outbursts) and they are re-rendered with the edit recipes as a
     new version (clip_03_v2.mp4), so the old render stays for comparison."""
@@ -333,12 +333,15 @@ def remake_clips(job_dir: Path, ids: list[str], settings: Settings) -> list[str]
     for c in todo:
         cand = {"peak": float(c.get("payoff") or (c["start"] + c["end"]) / 2), "category": c.get("category"),
                 "llm_score": c.get("score", 0), "reason": c.get("reason", "")}
-        print(f"[remake] Gemini menonton ulang {c['id']}: {c.get('title', '')}", flush=True)
-        try:
-            r = moments.stage_b(cand, source, words, settings, "Windah Basudara")
-        except Exception as e:
-            print(f"[remake] {c['id']}: gagal menonton ({e}); pakai batas lama", flush=True)
-            r = None
+        r = None
+        if same:  # deterministic: keep Gemini's previous marks, only re-apply the rules + render
+            print(f"[remake] {c['id']}: pakai tanda momen yang tersimpan", flush=True)
+        else:
+            print(f"[remake] Gemini menonton ulang {c['id']}: {c.get('title', '')}", flush=True)
+            try:
+                r = moments.stage_b(cand, source, words, settings, "Windah Basudara")
+            except Exception as e:
+                print(f"[remake] {c['id']}: gagal menonton ({e}); pakai batas lama", flush=True)
         if r is None:
             kind = c.get("kind") or moments.guess_kind(cand, words)
             r = {"start": c["start"], "payoff": cand["peak"], "end": c["end"], "kind": kind,

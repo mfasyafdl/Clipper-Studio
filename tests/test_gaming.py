@@ -241,7 +241,7 @@ def test_fake_cry_break_fallback_and_length_cap():
                           "beats": {"trigger": 6500.0, "break_character": None}}, 99999, words)
     assert c["beats"]["break_character"] == pytest.approx(6538.0)  # start of the phrase, not "shit"
     assert c["beats"]["ending"] == "break_character_cut"
-    assert c["end"] - c["start"] <= 39
+    assert c["end"] - c["start"] <= moments.HARD_MAX  # dead air is squeezed later by the jump cuts
 
 
 def test_save_clips_handles_numpy(tmp_path):
@@ -272,3 +272,17 @@ def test_fake_cry_bad_break_from_gemini_is_replaced():
                           "beats": {"trigger": 6524.4, "break_character": 6480.0}}, 99999, words)
     assert c["beats"]["break_character"] == pytest.approx(6530.5)
     assert c["start"] == pytest.approx(6513.0)  # opens on the setup sentence, not on "sih?"
+
+
+def test_fake_cry_end_follows_late_break():
+    # audit clip 5 v6: sob peak 6524.5, break ("Mika ...") at 6542.3 was cut off by payoff + 15
+    words = _w("gue nggak mau diingetin", 6503.6) + _w("Arthur we miss you", 6524.0) + _w("Mika you piece of shit", 6542.3)
+    c = moments.finalize({"start": 6503.6, "payoff": 6524.5, "end": 6541.3, "kind": "fake_cry",
+                          "beats": {"trigger": 6524.0, "break_character": 6542.3}}, 99999, words)
+    assert c["end"] >= 6544.0 and c["start"] == pytest.approx(6503.6)
+    assert c["beats"]["break_character"] == pytest.approx(6542.3)
+
+
+def test_card_emoji_dropped():
+    from clipper import captions
+    assert captions._esc("DENDAM KESUMAT SAMA MICAH 😡") == "DENDAM KESUMAT SAMA MICAH"

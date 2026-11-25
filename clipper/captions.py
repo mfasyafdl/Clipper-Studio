@@ -61,7 +61,12 @@ def _ts(seconds: float) -> str:
     return f"{cs // 360000}:{(cs // 6000) % 60:02d}:{(cs // 100) % 60:02d}.{cs % 100:02d}"
 
 
+_EMOJI = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\uFE0F\u200D]")
+
+
 def _esc(text: str) -> str:
+    # libass draws emoji as black-and-white outlines: drop them from burned-in text
+    text = _EMOJI.sub("", text).strip()
     return text.replace("\\", "").replace("{", "(").replace("}", ")").replace("\n", " ")
 
 
@@ -188,7 +193,7 @@ def write_srt(words: list[dict], path: Path, max_words: int = 6) -> None:
 
     lines = []
     for idx, g in enumerate(group_words(words, max_words=max_words), 1):
-        text = " ".join(w["word"] for w in g)
+        text = " ".join(w.get("display") or w["word"] for w in g)
         lines += [str(idx), f"{_fmt_srt(g[0]['start'])} --> {_fmt_srt(g[-1]['end'])}", text, ""]
     path.write_text("\n".join(lines), encoding="utf-8")
 

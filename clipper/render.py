@@ -175,8 +175,8 @@ def render_gaming(job_dir: Path, source: Path, clip: dict, words: list[dict], se
             print(f"[render] {name}: tidak ada musik di folder music/, momen sedih dirender tanpa musik",
                   flush=True)
     clip_words = captions.words_in_range(words, start, end)
-    captions.write_srt(clip_words, final_dir / f"{name}.srt")  # SRT keeps source timing for editors
     plan = effects.build_plan(beats, clip_words, settings.effects, settings.censor, music)
+    captions.write_srt(clip_words, final_dir / f"{name}.srt")  # after build_plan: matches the jump cuts
     clip["applied_plan"] = plan.describe()
     total = plan.duration + plan.tail
 
