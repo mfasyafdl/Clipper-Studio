@@ -48,7 +48,13 @@ _SFX_RECIPES = {
 
 HEAVY_SWEARS = {"kontol", "memek", "ngentot", "entot", "bangsat", "jancok", "jancuk", "pepek"}
 MEDIUM_SWEARS = {"anjing", "anjeng", "babi", "goblok", "tolol", "asu", "kampret", "bajingan", "tai"}
-RAGE_WORDS = HEAVY_SWEARS | MEDIUM_SWEARS | {"anjir", "anjay", "njir", "bjir", "woi", "woy", "astaga", "sialan"}
+EN_SWEARS = {"shit", "fuck", "fucking", "bitch", "damn"}  # red in captions, not bleeped
+RAGE_WORDS = HEAVY_SWEARS | MEDIUM_SWEARS | EN_SWEARS | {"anjir", "anjay", "njir", "bjir", "woi", "woy", "astaga", "sialan"}
+
+
+def is_laugh(word: str) -> bool:
+    n = _norm(word)
+    return n.startswith(("wkwk", "haha", "hehe", "hihi")) or n in ("wk", "awok", "awokwok")
 
 GAP_MAX = 2.5   # silence longer than this inside a clip is compressed ...
 GAP_KEEP = 0.6  # ... keeping this much on each side

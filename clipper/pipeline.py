@@ -146,7 +146,8 @@ def render_captions(job_dir: Path, clips: list[dict], words: list[dict], setting
 
 
 def save_clips(job_dir: Path, clips: list[dict]) -> None:
-    (job_dir / "clips.json").write_text(json.dumps(clips, ensure_ascii=False, indent=1), encoding="utf-8")
+    (job_dir / "clips.json").write_text(json.dumps(clips, ensure_ascii=False, indent=1,
+                                                                  default=lambda o: o.item() if hasattr(o, "item") else str(o)), encoding="utf-8")
 
 
 def load_clips(job_dir: Path) -> list[dict]:

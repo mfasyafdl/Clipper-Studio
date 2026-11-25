@@ -96,8 +96,8 @@ def cam_rect_from_faces(faces: list[tuple[float, float, float, float]], src_w: i
     y = int(min(max(0, cy - 0.42 * h), src_h - h))
     x, y, w, h = x - x % 2, y - y % 2, w - w % 2, h - h % 2
     # where the face really sits after clamping to the frame edge
-    return CamRect(x, y, w, h, True, round(min(0.8, max(0.2, (cx - x) / w)), 3),
-                   round(min(0.75, max(0.25, (cy - y) / h)), 3))
+    return CamRect(int(x), int(y), int(w), int(h), True, round(float(min(0.8, max(0.2, (cx - x) / w))), 3),
+                   round(float(min(0.75, max(0.25, (cy - y) / h))), 3))
 
 
 def detect_cam(source: Path, start: float, end: float, preset_name: str, samples: int = 16) -> CamRect:

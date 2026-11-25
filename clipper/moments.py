@@ -57,7 +57,8 @@ Jenis momen (moment_type):
   peak (ledakan terbesar), reaction_end_s (detik dia BENAR-BENAR selesai ngomel, bukan saat kata kasar
   pertama), outbursts (semua ledakan, rank 1 = terbesar).
 - fake_cry: dia pura-pura nangis / akting sedih lebay. Tandai trigger (mulai akting sedih), peak
-  (isak/teriak paling lebay), break_character_s (detik dia ketawa / kembali normal; null kalau tidak).
+  (isak/teriak paling lebay), break_character_s (detik dia KELUAR dari akting: ketawa, memaki,
+  suara kembali normal, atau punchline). Hampir selalu ada; null hanya kalau dia benar-benar tidak pernah keluar.
 - other: selain itu (jumpscare, fail, absurd, banter).
 
 Batas clip:
@@ -112,7 +113,10 @@ def _json(text: str) -> dict:
     text = (text or "").strip()
     text = re.sub(r"^```(?:json)?|```$", "", text, flags=re.M).strip()
     start = text.find("{")
-    return json.loads(text[start:]) if start >= 0 else {}
+    if start < 0:
+        return {}
+    obj, _ = json.JSONDecoder().raw_decode(text[start:])  # ignore chatter after the JSON object
+    return obj if isinstance(obj, dict) else {}
 
 
 def window_text(words: list[dict], a: float, b: float, rel_to: float = 0.0) -> str:
@@ -253,14 +257,22 @@ def finalize(clip: dict, duration: float, words: list[dict] | None = None) -> di
     start, payoff, end = clip["start"], clip["payoff"], clip["end"]
     beats = clip.get("beats") or {}
     words = words or []
+    if clip.get("kind") == "fake_cry" and not beats.get("break_character") and words:
+        # Gemini missed the break: first laugh / swear after the sob ends the act
+        after = max(float(beats.get("trigger") or start), payoff) + 1.0
+        hit = next((w for w in words if after <= w["start"] <= end + 3
+                    and (effects.is_laugh(w["word"]) or effects._norm(w["word"]) in effects.RAGE_WORDS)), None)
+        if hit:
+            beats["break_character"] = float(hit["start"])
+            beats["ending"] = "break_character_cut"
     if clip.get("kind") == "rage" and beats.get("reaction_end"):
         end = max(end, float(beats["reaction_end"]) + 0.4)
     elif clip.get("kind") == "fake_cry" and beats.get("break_character"):
         end = max(end, float(beats["break_character"]) + 1.3)
     end = min(end, payoff + 15.0)
     end = effects.snap_end(words, end, payoff + 15.0) + (0.3 if words else 0.0)
-    if end - start > HARD_MAX:
-        start = end - MAX_LEN
+    if end - start > HARD_MAX or (clip.get("kind") in ("rage", "fake_cry") and end - start > MAX_LEN):
+        start = snap_start(words, end - MAX_LEN)
     if end - start < MIN_LEN:
         start = max(0.0, end - MIN_LEN)
     clip.update(start=round(max(0.0, start), 2), payoff=round(payoff, 2), end=round(min(duration, end), 2))

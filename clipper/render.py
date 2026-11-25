@@ -155,7 +155,7 @@ def render_gaming(job_dir: Path, source: Path, clip: dict, words: list[dict], se
     if not clip.get("cam"):
         rect = layout.detect_cam(source, start, end, settings.layout_preset)
         clip["cam"] = {"x": rect.x, "y": rect.y, "w": rect.w, "h": rect.h, "found": rect.found,
-                       "face_x": rect.face_x, "face_y": rect.face_y}
+                       "face_x": float(rect.face_x), "face_y": float(rect.face_y)}
     cam = layout.CamRect(**clip["cam"])
 
     beats = _beats(clip)

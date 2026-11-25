@@ -228,3 +228,21 @@ def test_gaming_end_to_end(tmp_path, monkeypatch, kind):
     assert c["cam"]["found"] is False  # offline -> preset rectangle
     ass = (job / "final" / f"{c['id']}.ass").read_text(encoding="utf-8")
     assert "BANGS*T" in ass and "BANGSAT" not in ass
+
+
+def test_json_ignores_trailing_text():
+    assert moments._json('```json\n{"keep": true}\n```\nSemoga membantu {x}') == {"keep": True}
+
+
+def test_fake_cry_break_fallback_and_length_cap():
+    words = _w("huhu sedih banget", 6500.0, 0.8) + _w("kenapa aku", 6520.0) + _w("Micah you piece of shit", 6538.0)
+    c = moments.finalize({"start": 6498.5, "payoff": 6510.0, "end": 6540.3, "kind": "fake_cry",
+                          "beats": {"trigger": 6500.0, "break_character": None}}, 99999, words)
+    assert c["beats"]["break_character"] == pytest.approx(6539.6)
+    assert c["beats"]["ending"] == "break_character_cut"
+    assert c["end"] - c["start"] <= 39
+
+
+def test_save_clips_handles_numpy(tmp_path):
+    pipeline.save_clips(tmp_path, [{"cam": {"face_x": np.float32(0.5)}}])
+    assert json.loads((tmp_path / "clips.json").read_text(encoding="utf-8"))[0]["cam"]["face_x"] == 0.5
