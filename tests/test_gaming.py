@@ -287,3 +287,10 @@ def test_fake_cry_end_follows_late_break():
 def test_card_emoji_dropped():
     from clipper import captions
     assert captions._esc("DENDAM KESUMAT SAMA MICAH 😡") == "DENDAM KESUMAT SAMA MICAH"
+
+
+def test_fake_cry_ends_shortly_after_break():
+    words = _w("Mika you piece of shit.", 6530.4, 0.3) + _w("kenapa ya", 6534.0) + _w("Guys gue pengen lanjutin game ini", 6542.3)
+    c = moments.finalize({"start": 6503.6, "payoff": 6524.5, "end": 6544.6, "kind": "fake_cry",
+                          "beats": {"trigger": 6524.0, "break_character": 6530.4}}, 99999, words)
+    assert 6531.7 <= c["end"] <= 6533.7  # not 12 s later after "Guys ..."
