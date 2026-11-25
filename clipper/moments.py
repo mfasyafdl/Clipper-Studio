@@ -65,13 +65,20 @@ Transkrip (detik relatif):
 {transcript}"""
 
 
+_CLIENTS: dict[str, object] = {}
+
+
 def _client(settings: Settings):
+    """One genai.Client per key, kept alive: a throwaway client gets garbage-
+    collected mid-call and google-genai then fails with "client has been closed"."""
     from google import genai  # installed in .venv-wx
 
     key = settings.llm_env.get("GEMINI_API_KEY")
     if not key:
         raise RuntimeError("GEMINI_API_KEY belum diisi di .env")
-    return genai.Client(api_key=key)
+    if key not in _CLIENTS:
+        _CLIENTS[key] = genai.Client(api_key=key)
+    return _CLIENTS[key]
 
 
 def _model(settings: Settings) -> str:
