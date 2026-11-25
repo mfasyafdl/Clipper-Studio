@@ -84,7 +84,7 @@ def test_fake_cry_plan_desaturates_and_snaps_back_on_break(tmp_path):
     beats = {"duration": 12.0, "kind": "fake_cry", "peak": 5.0, "trigger": 2.0, "break_s": 9.5,
              "cards": [(3.0, 2.0, "dia kehilangan segalanya...")]}
     plan = effects.build_plan(beats, words, "full", "heavy", music)
-    assert plan.desat == (2.0, 9.5) and plan.music == (music, 1.4, 9.5)
+    assert plan.desat == (pytest.approx(1.6), 9.5) and plan.music == (music, pytest.approx(1.0), 9.5)
     assert plan.punches[0].ease == "out_back" and ("scratch", 9.45) in plan.sfx
     assert plan.ending == "break_character_cut" and plan.cards
     assert "hue=s=" in effects.color_chain(plan)[0]
@@ -104,7 +104,8 @@ def test_long_fake_cry_is_squeezed_and_grey_only_near_the_break():
     assert plan.duration < 30 and len(plan.segments) > 1
     t0, b = plan.desat
     assert b - t0 <= effects.SAD_MAX + 1e-6
-    assert [c[2] for c in plan.cards] == ["dia kehilangan segalanya..."]
+    assert "dia kehilangan segalanya..." in [c[2] for c in plan.cards]
+    assert all(t0 <= c[0] < b for c in plan.cards)  # cards only while it is grey
 
 
 def test_fake_cry_without_break_freezes_and_fades():

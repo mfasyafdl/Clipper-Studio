@@ -59,7 +59,7 @@ def is_laugh(word: str) -> bool:
 GAP_MAX = 2.5   # silence longer than this inside a clip is compressed ...
 GAP_KEEP = 0.6  # ... keeping this much on each side
 MIN_OUT = 15.0  # never squeeze a clip below this
-SAD_MAX = 10.0  # black-and-white + sad music lasts at most this long before the break
+SAD_MAX = 14.0  # black-and-white + sad music lasts at most this long before the break
 
 
 def _norm(word: str) -> str:
@@ -255,7 +255,8 @@ def build_plan(beats: dict, words: list[dict], level: str, censor: str, music: P
         brk = beats.get("break_s")
         b = R(float(brk)) if brk is not None else out_D
         # the sad treatment is a short bit, not the whole clip: at most SAD_MAX before the break
-        t0 = max(R(float(beats.get("trigger", max(0.0, peak - 6)))), b - SAD_MAX)
+        # grey a beat before the act starts, so its first sad line is already grey
+        t0 = max(0.0, R(float(beats.get("trigger", max(0.0, peak - 6)))) - 0.4, b - SAD_MAX)
         b = min(out_D, max(b, t0 + 2.0))
         plan.desat = (t0, b)
         plan.push = (t0, min(b, t0 + 8.0), 0.18)
