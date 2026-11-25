@@ -262,3 +262,13 @@ def test_best_cam_prefers_solid_detection(tmp_path):
     pipeline.save_clips(tmp_path, clips)
     assert pipeline.best_cam(tmp_path, "clip_02")["x"] == 1
     assert pipeline.best_cam(tmp_path / "nope") is None
+
+
+def test_fake_cry_bad_break_from_gemini_is_replaced():
+    words = _w("gue nggak mau diingetin soal Arthur itu bikin nangis sih?", 6513.0, 0.5) + \
+        _w("Arthur we miss you so much", 6524.4) + _w("why you have to die?", 6527.9) + \
+        _w("Mika you piece of shit.", 6530.5, 0.6)
+    c = moments.finalize({"start": 6517.4, "payoff": 6527.9, "end": 6539.8, "kind": "fake_cry",
+                          "beats": {"trigger": 6524.4, "break_character": 6480.0}}, 99999, words)
+    assert c["beats"]["break_character"] == pytest.approx(6530.5)
+    assert c["start"] == pytest.approx(6513.0)  # opens on the setup sentence, not on "sih?"

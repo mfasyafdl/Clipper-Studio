@@ -62,7 +62,8 @@ Jenis momen (moment_type):
 - other: selain itu (jumpscare, fail, absurd, banter).
 
 Batas clip:
-- start_s: rage setup 2-5 dtk sebelum trigger; fake_cry mulai 1-3 dtk sebelum akting sedih; horor simpan
+- start_s: SERTAKAN kalimat setup yang memicu momennya (mis. "gue nggak mau diingetin soal Arthur").
+  rage setup 2-5 dtk sebelum trigger; fake_cry mulai di kalimat setup sebelum akting sedih; horor simpan
   build-up 10-20 dtk. Mulai di awal kalimat.
 - end_s: JANGAN memotong di tengah kalimat atau di tengah omelan. rage: 0.3-0.6 dtk setelah
   reaction_end_s. fake_cry: 1-1.5 dtk setelah break_character_s. Lainnya: 0.5-1.5 dtk setelah reaksi selesai.
@@ -230,17 +231,17 @@ def parse_stage_b(r: dict, a: float, c: dict) -> dict | None:
             "category": category, "llm_score": int(_num(r.get("score")) or c.get("llm_score", 0))}
 
 
-def snap_start(words: list[dict], t: float) -> float:
+def snap_start(words: list[dict], t: float, max_back: float = 4.0) -> float:
     """Move a start back to the beginning of the sentence/pause it falls in."""
     prev_end = None
     best = t
     for w in words:
         if w["start"] > t:
             break
-        if prev_end is not None and w["start"] - prev_end >= 0.4:
+        if prev_end is None or w["start"] - prev_end >= 0.4:
             best = w["start"]
         prev_end = w["end"]
-    return best if t - best <= 4 else t
+    return best if t - best <= max_back else t
 
 
 def heuristic_bounds(c: dict, words: list[dict]) -> tuple[float, float, float]:
@@ -257,17 +258,24 @@ def finalize(clip: dict, duration: float, words: list[dict] | None = None) -> di
     start, payoff, end = clip["start"], clip["payoff"], clip["end"]
     beats = clip.get("beats") or {}
     words = words or []
+    trig = beats.get("trigger")
+    if trig is not None and not start - 5 <= float(trig) <= end:
+        beats["trigger"] = trig = None
+    brk = beats.get("break_character")
+    if brk is not None and not (max(start, float(trig) if trig is not None else start) + 1.0 < float(brk) <= end + 3):
+        # Gemini sometimes answers 0 / a time outside the clip instead of null
+        beats["break_character"] = None
     if clip.get("kind") == "fake_cry" and not beats.get("break_character") and words:
         # Gemini missed the break: the phrase with the first laugh / swear after
         # the act started ends it ("...why you have to die? MIKA YOU PIECE OF SHIT")
-        after = float(beats.get("trigger") or start) + 2.0
+        after = float(trig if trig is not None else start) + 1.0
         inside = [w for w in words if after <= w["start"] <= end + 3]
         i = next((k for k, w in enumerate(inside)
                   if effects.is_laugh(w["word"]) or effects._norm(w["word"]) in effects.RAGE_WORDS), None)
         if i is not None:
             j = i
             while j > 0 and inside[j]["start"] - inside[j - 1]["end"] < 0.35 \
-                    and inside[i]["start"] - inside[j - 1]["start"] <= 2.0:
+                    and inside[i]["start"] - inside[j - 1]["start"] <= 3.0:
                 j -= 1
             beats["break_character"] = float(inside[j]["start"])
             beats["ending"] = "break_character_cut"
@@ -279,6 +287,10 @@ def finalize(clip: dict, duration: float, words: list[dict] | None = None) -> di
     end = effects.snap_end(words, end, payoff + 15.0) + (0.3 if words else 0.0)
     if end - start > HARD_MAX or (clip.get("kind") in ("rage", "fake_cry") and end - start > MAX_LEN):
         start = snap_start(words, end - MAX_LEN)
+    elif clip.get("kind") in ("rage", "fake_cry") and any(
+            w["start"] < start < min(w["end"], w["start"] + 1.2) + 0.4 for w in words):
+        # never open on the tail of a sentence ("sih?"): back to where it starts, keeping the setup
+        start = snap_start(words, start, max_back=min(8.0, MAX_LEN - (end - start)))
     if end - start < MIN_LEN:
         start = max(0.0, end - MIN_LEN)
     clip.update(start=round(max(0.0, start), 2), payoff=round(payoff, 2), end=round(min(duration, end), 2))
